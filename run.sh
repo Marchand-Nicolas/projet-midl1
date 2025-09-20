@@ -1,1 +1,1 @@
-ocaml syntax.ml </dev/null
+ocaml syntax.ml

@@ -90,18 +90,21 @@ let dual f =
     | Conj -> Disj
     | Disj -> Conj
     | x -> x
+  in
   let rec aux f = match f with
     | Variable _ | Const _ | Number _ -> f
     | Quantif(Forall, v, f') -> Quantif(Forall,v, aux f')
     | Quantif(Exists, v, f') -> Quantif(Exists, v, aux f')
-    | NotF(f') -> Not(aux f')
-    | ComparF(f',Equal,g') -> ComparF(aux f', Equal, Aux g')
-    | ComparF()
+    | NotF(f') -> NotF(aux f')
+    | ComparF(f',Equal,g') -> ComparF(aux f', Equal, aux g')
+    | ComparF(f',Lt, g') -> ComparF(aux f', Lt, aux g')
+    | BoolF(f', op, g') -> BoolF(f', dual_op op, g') 
+  in aux f;;
 
 let example_1 = 
   forall (var "x") (
     exists (var "y") (
-      gt (var "x") (var "y")
+      lt (var "x") (var "y")
     )
   );;
 

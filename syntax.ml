@@ -5,7 +5,6 @@ open Printf
 type compar_op =
   | Equal
   | Lt
-  | Gt
 ;;
 
 type bool_const =
@@ -16,6 +15,7 @@ type bool_const =
 type bool_op =
   | Conj 
   | Disj
+  | Impl
 ;;
 
 type quantif =
@@ -45,11 +45,11 @@ let rep_const = function
 let rep_comp_op = function
   | Equal -> "="
   | Lt -> "<"
-  | Gt -> ">"
 
 let rep_bool_op = function
   | Conj -> "∧"
   | Disj -> "∨"
+  | Impl -> "->"
 ;;
 
 let rep_not = "¬";;
@@ -76,13 +76,60 @@ let bottom = Const(Bottom);;
 let forall v f = Quantif(Forall, v, f);;
 let exists v f = Quantif(Exists, v, f);;
 let equal f g = ComparF(f,Equal,g);;
-let gt f g = ComparF(f, Gt, g);;
 let lt f g = ComparF(f,Lt, g);;
 let notf f = NotF(f);;
 let conj f g = BoolF(f,Conj,g);;
 let disj f g = BoolF(f,Disj,g);;
+let implies f g = BoolF(f,Impl, g);;
 let var x = Variable(x);;
 
 let rec print_formula f = print_string (rep_formula f ^ "\n");;
 
-print_formula (forall (var "x") (exists (var "y") (gt (var "x" ) (var "y"))));;
+let dual f =
+  let dual_op = function
+    | Conj -> Disj
+    | Disj -> Conj
+    | x -> x
+  let rec aux f = match f with
+    | Variable _ | Const _ | Number _ -> f
+    | Quantif(Forall, v, f') -> Quantif(Forall,v, aux f')
+    | Quantif(Exists, v, f') -> Quantif(Exists, v, aux f')
+    | NotF(f') -> Not(aux f')
+    | ComparF(f',Equal,g') -> ComparF(aux f', Equal, Aux g')
+    | ComparF()
+
+let example_1 = 
+  forall (var "x") (
+    exists (var "y") (
+      gt (var "x") (var "y")
+    )
+  );;
+
+let example_2 = 
+  forall (var "x") (
+    forall (var "y") (
+      forall (var "z") (
+        exists (var "u") (
+          implies (
+            conj (
+              lt (var "x") (var "y")
+            )
+            (
+              lt (var "x") (var "z")
+            )
+          )
+          (
+            conj(
+              lt (var "y") (var "u")
+            )
+            (
+              lt (var "z") (var "u")
+            )
+          )
+        )
+      ) 
+    )
+  )
+;;
+
+print_formula example_2;;

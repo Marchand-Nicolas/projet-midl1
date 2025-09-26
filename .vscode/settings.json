@@ -1,6 +1,8 @@
 {
   "ocaml.sandbox": {
     "kind": "opam",
-    "switch": "robin"
-  }
+    "switch": "default"
+  },
+  "ocaml.dune.profile": "dev",
+  "ocaml.trace.server": "verbose"
 }

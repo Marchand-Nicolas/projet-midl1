@@ -1,60 +1,65 @@
 (* Symbols : ⊤ ⊥ ∧ ∨ ¬ = < ⩽ > ⩾ ∀ ∃ *)
 
+module SyntaxTree = struct
+
+  type compar_op =
+    | Equal
+    | Lt
+  ;;
+
+  type bool_const =
+    | Top     (*"true"*)
+    | Bottom (*"false"*)
+  ;; 
+
+  type bool_op =
+    | Conj 
+    | Disj
+    | Impl
+  ;;
+
+  type quantif =
+    | Exists
+    | Forall
+
+  type formula =
+    | Const of bool_const
+    | Variable of string
+    | Number of float
+    | ComparF of formula * compar_op * formula
+    | BoolF of formula * bool_op * formula
+    | NotF of formula
+    | Quantif of quantif * formula * formula
+  ;;
+
+  let rep_quantif = function
+    | Exists -> "∃"
+    | Forall -> "∀"
+  ;;
+
+  let rep_const = function
+    | Top -> "Τ"
+    | Bottom -> "⊥"
+  ;;
+
+  let rep_comp_op = function
+    | Equal -> "="
+    | Lt -> "<"
+
+  let rep_bool_op = function
+    | Conj -> "∧"
+    | Disj -> "∨"
+    | Impl -> "->"
+  ;;
+
+  let rep_not = "¬";;
+
+  let rep_number = string_of_float;;
+
+end;;
+
 open Printf
-
-type compar_op =
-  | Equal
-  | Lt
-;;
-
-type bool_const =
-  | Top     (*"true"*)
-  | Bottom (*"false"*)
-;; 
-
-type bool_op =
-  | Conj 
-  | Disj
-  | Impl
-;;
-
-type quantif =
-  | Exists
-  | Forall
-
-type formula =
-  | Const of bool_const
-  | Variable of string
-  | Number of float
-  | ComparF of formula * compar_op * formula
-  | BoolF of formula * bool_op * formula
-  | NotF of formula
-  | Quantif of quantif * formula * formula
-;;
-
-let rep_quantif = function
-  | Exists -> "∃"
-  | Forall -> "∀"
-;;
-
-let rep_const = function
-  | Top -> "Τ"
-  | Bottom -> "⊥"
-;;
-
-let rep_comp_op = function
-  | Equal -> "="
-  | Lt -> "<"
-
-let rep_bool_op = function
-  | Conj -> "∧"
-  | Disj -> "∨"
-  | Impl -> "->"
-;;
-
-let rep_not = "¬";;
-
-let rep_number = string_of_float;;
+open SyntaxTree
 
 let rec rep_formula = function
   | Const c -> rep_const c

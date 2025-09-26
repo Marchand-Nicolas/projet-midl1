@@ -85,6 +85,12 @@ let var x = Variable(x);;
 
 let rec print_formula f = print_string (rep_formula f ^ "\n");;
 
+(*
+signature :
+  dual : formula -> formula
+
+Cette fonction renvoie la forme duale de la formule passée en paramètres.
+*)
 let dual f =
   let dual_op = function
     | Conj -> Disj
@@ -100,6 +106,27 @@ let dual f =
     | ComparF(f',Lt, g') -> ComparF(aux f', Lt, aux g')
     | BoolF(f', op, g') -> BoolF(f', dual_op op, g') 
   in aux f;;
+
+
+(* 
+signature : 
+  is_prenex : formula -> bool 
+
+Cette fonction renvoie Vrai si la formule passée en paramètres est vraie, faux sinon.
+*)
+
+
+let is_prenex f =
+  let rec aux f met_smth = match (f, met_smth) with
+    | (Quantif(q, Variable v, f'),false) -> aux f' false
+    | (Quantif(q, Variable v, f'), true) -> false
+    | (ComparF(f',_,g'), _ ) | (BoolF(f', _, g'),_) ->  aux f' true && aux g' true
+    | (NotF(f'),_) -> aux f' true
+    | (Variable(_),_) | (Number(_), _) | (Const(_),_) -> true
+    | _, _ -> false
+  in aux f false
+  ;;
+
 
 let example_1 = 
   forall (var "x") (

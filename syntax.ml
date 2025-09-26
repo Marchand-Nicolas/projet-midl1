@@ -135,4 +135,8 @@ let example_2 =
   )
 ;;
 
+print_string "Example 1: ";;
+print_formula example_1;;
+
+print_string "Example 2: ";;
 print_formula example_2;;

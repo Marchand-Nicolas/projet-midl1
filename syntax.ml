@@ -168,6 +168,7 @@ let rec neg_inside f = match f with
   | NotF(Quantif(Exists, v, f')) -> Quantif(Forall, v, neg_inside (NotF(f')))
   | NotF(Quantif(Forall, v, f')) -> Quantif(Exists, v, neg_inside (NotF(f')))
   | NotF(NotF(f')) -> neg_inside f'
+  | Quantif(q, v, f') -> Quantif(q, v, neg_inside f')
   | _ -> f
 ;;
 

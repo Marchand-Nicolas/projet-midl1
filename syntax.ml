@@ -107,6 +107,25 @@ let dual f =
     | BoolF(f', op, g') -> BoolF(f', dual_op op, g') 
   in aux f;;
 
+  let rec univ_to_exist f = match f with
+    | Quantif(Forall, v, f') -> notf (exists v (notf (univ_to_exist f')))
+    | _ -> f
+  ;;
+
+let example_univ =
+  forall (var "x") (
+    exists (var "y") (
+      lt (var "x") (var "y")
+    )
+  )
+;;
+
+print_string "Example univ: ";;
+print_formula example_univ;;
+
+print_string "Example univ to exist: ";;
+print_formula (univ_to_exist example_univ);;
+
 
 (* 
 signature : 
@@ -162,4 +181,8 @@ let example_2 =
   )
 ;;
 
+print_string "Example 1: ";;
+print_formula example_1;;
+
+print_string "Example 2: ";;
 print_formula example_2;;

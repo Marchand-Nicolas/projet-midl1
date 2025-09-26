@@ -260,12 +260,26 @@ let rec neg_elim f = match f with
   | NotF(ComparF(g, Equal, h)) -> disj (lt g h) (lt h g)
   | NotF(ComparF(g, Lt, h)) -> disj (lt h g) (equal g h)
   | Quantif(q, v, f') -> Quantif(q, v, neg_elim f')
+  | BoolF(f, op, g) -> BoolF(neg_elim f, op, neg_elim g)
   | _ -> f
 ;;
 
-let example_neg_elim =
+let example_relation_formula =
   notf (ComparF(var "x", Equal, var "y"))
 ;;
 
+print_string "Example relation formula: ";;
+print_formula example_relation_formula;;
+
 print_string "Example neg elim: ";;
-print_formula (neg_elim example_neg_elim);;
+print_formula (neg_elim example_relation_formula);;
+
+let example_relation_formula_2 =
+  BoolF(NotF(ComparF(var "x", Equal, var "y")), Conj, NotF(ComparF(var "x", Lt, var "y")))
+;;
+
+print_string "Example relation formula 2: ";;
+print_formula example_relation_formula_2;;
+
+print_string "Example neg elim 2: ";;
+print_formula (neg_elim example_relation_formula_2);;

@@ -254,39 +254,7 @@ print_formula example_neg_exist_2;;
 
 print_string "Example neg inside 2: ";;
 print_formula (neg_inside example_neg_exist_2);;
-let example_1 = 
-  forall (var "x") (
-    exists (var "y") (
-      lt (var "x") (var "y")
-    )
-  );;
 
-let example_2 = 
-  forall (var "x") (
-    forall (var "y") (
-      forall (var "z") (
-        exists (var "u") (
-          implies (
-            conj (
-              lt (var "x") (var "y")
-            )
-            (
-              lt (var "x") (var "z")
-            )
-          )
-          (
-            conj(
-              lt (var "y") (var "u")
-            )
-            (
-              lt (var "z") (var "u")
-            )
-          )
-        )
-      ) 
-    )
-  )
-;;
 
 print_string "Example 1: ";;
 print_formula example_1;;

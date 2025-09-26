@@ -203,3 +203,18 @@ print_formula example_neg_exist_2;;
 
 print_string "Example neg inside 2: ";;
 print_formula (neg_inside example_neg_exist_2);;
+
+(* Step 2.2: Eliminate negations in front of relations *)
+let rec neg_elim f = match f with
+  | NotF(ComparF(g, Equal, h)) -> disj (lt g h) (lt h g)
+  | NotF(ComparF(g, Lt, h)) -> disj (lt h g) (equal g h)
+  | Quantif(q, v, f') -> Quantif(q, v, neg_elim f')
+  | _ -> f
+;;
+
+let example_neg_elim =
+  notf (ComparF(var "x", Equal, var "y"))
+;;
+
+print_string "Example neg elim: ";;
+print_formula (neg_elim example_neg_elim);;

@@ -101,6 +101,49 @@ let dual f =
     | BoolF(f', op, g') -> BoolF(f', dual_op op, g') 
   in aux f;;
 
+  let example_1 = 
+    forall (var "x") (
+      exists (var "y") (
+        lt (var "x") (var "y")
+      )
+    );;
+  
+  let example_2 = 
+    forall (var "x") (
+      forall (var "y") (
+        forall (var "z") (
+          exists (var "u") (
+            implies (
+              conj (
+                lt (var "x") (var "y")
+              )
+              (
+                lt (var "x") (var "z")
+              )
+            )
+            (
+              conj(
+                lt (var "y") (var "u")
+              )
+              (
+                lt (var "z") (var "u")
+              )
+            )
+          )
+        ) 
+      )
+    )
+  ;;
+  
+  print_string "Example 1: ";;
+  print_formula example_1;;
+  
+  print_string "Example 2: ";;
+  print_formula example_2;;
+
+
+  (* Step 1: We assume all formulas are in prenex form *)
+  (* Step 2: Convert universal quantifier to existential quantifier while preserving the formula meaning *)
   let rec univ_to_exist f = match f with
     | Quantif(Forall, v, f') -> notf (exists v (notf (univ_to_exist f')))
     | _ -> f
@@ -120,42 +163,42 @@ print_formula example_univ;;
 print_string "Example univ to exist: ";;
 print_formula (univ_to_exist example_univ);;
 
-let example_1 = 
-  forall (var "x") (
-    exists (var "y") (
-      lt (var "x") (var "y")
-    )
-  );;
-
-let example_2 = 
-  forall (var "x") (
-    forall (var "y") (
-      forall (var "z") (
-        exists (var "u") (
-          implies (
-            conj (
-              lt (var "x") (var "y")
-            )
-            (
-              lt (var "x") (var "z")
-            )
-          )
-          (
-            conj(
-              lt (var "y") (var "u")
-            )
-            (
-              lt (var "z") (var "u")
-            )
-          )
-        )
-      ) 
-    )
-  )
+(* Step 2.1 Put negations inside the formula *)
+let rec neg_inside f = match f with
+  | NotF(Quantif(Exists, v, f')) -> Quantif(Forall, v, neg_inside (NotF(f')))
+  | NotF(Quantif(Forall, v, f')) -> Quantif(Exists, v, neg_inside (NotF(f')))
+  | NotF(NotF(f')) -> neg_inside f'
+  | _ -> f
 ;;
 
-print_string "Example 1: ";;
-print_formula example_1;;
+let example_neg_inside =
+  notf (exists (var "x") (
+    lt (var "x") (var "y")
+  ))
+;;
 
-print_string "Example 2: ";;
-print_formula example_2;;
+let example_neg_exist =
+  notf (exists (var "x") (
+    lt (var "x") (var "y")
+  ))
+;;
+
+print_string "Example neg exist: ";;
+print_formula example_neg_exist;;
+
+print_string "Example neg inside: ";;
+print_formula (neg_inside example_neg_exist);;
+
+let example_neg_exist_2 =
+  notf (exists (var "x") (
+    notf (exists (var "y") (
+      lt (var "x") (var "y")
+    ))
+  ))
+;;
+
+print_string "Example neg exist 2: ";;
+print_formula example_neg_exist_2;;
+
+print_string "Example neg inside 2: ";;
+print_formula (neg_inside example_neg_exist_2);;

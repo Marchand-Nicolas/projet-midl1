@@ -29,7 +29,7 @@ module SyntaxTree = struct
     | ComparF of formula * compar_op * formula
     | BoolF of formula * bool_op * formula
     | NotF of formula
-    | Quantif of quantif * formula * formula
+    | QuantifF of quantif * formula * formula
   ;;
 
   let rep_quantif = function
@@ -69,8 +69,8 @@ let rec rep_formula = function
   "(%s %s %s)" (rep_formula f) (rep_bool_op op) (rep_formula g)
   | NotF f -> sprintf
   "%s%s" rep_not (rep_formula f)
-  | Quantif(q, Variable v, f) -> sprintf
-  "(%s %s %s)" (rep_quantif q) v (rep_formula f)
+  | QuantifF(q, Variable v, f) -> sprintf
+  "(%s%s.%s)" (rep_quantif q) v (rep_formula f)
   | Variable v -> v
   | Number n -> rep_number n
   | _ -> failwith("Erreur dans la représentation de la formule")
@@ -78,8 +78,8 @@ let rec rep_formula = function
 
 let top = Const(Top);;
 let bottom = Const(Bottom);;
-let forall v f = Quantif(Forall, v, f);;
-let exists v f = Quantif(Exists, v, f);;
+let forall v f = QuantifF(Forall, v, f);;
+let exists v f = QuantifF(Exists, v, f);;
 let equal f g = ComparF(f,Equal,g);;
 let lt f g = ComparF(f,Lt, g);;
 let notf f = NotF(f);;
@@ -104,8 +104,8 @@ let dual f =
   in
   let rec aux f = match f with
     | Variable _ | Const _ | Number _ -> f
-    | Quantif(Forall, v, f') -> Quantif(Forall,v, aux f')
-    | Quantif(Exists, v, f') -> Quantif(Exists, v, aux f')
+    | QuantifF(Forall, v, f') -> QuantifF(Forall,v, aux f')
+    | QuantifF(Exists, v, f') -> QuantifF(Exists, v, aux f')
     | NotF(f') -> NotF(aux f')
     | ComparF(f',Equal,g') -> ComparF(aux f', Equal, aux g')
     | ComparF(f',Lt, g') -> ComparF(aux f', Lt, aux g')
@@ -113,7 +113,7 @@ let dual f =
   in aux f;;
 
   let rec univ_to_exist f = match f with
-    | Quantif(Forall, v, f') -> notf (exists v (notf (univ_to_exist f')))
+    | QuantifF(Forall, v, f') -> notf (exists v (notf (univ_to_exist f')))
     | _ -> f
   ;;
 
@@ -142,8 +142,8 @@ Cette fonction renvoie Vrai si la formule passée en paramètres est vraie, faux
 
 let is_prenex f =
   let rec aux f met_smth = match (f, met_smth) with
-    | (Quantif(q, Variable v, f'),false) -> aux f' false
-    | (Quantif(q, Variable v, f'), true) -> false
+    | (QuantifF(q, Variable v, f'),false) -> aux f' false
+    | (QuantifF(q, Variable v, f'), true) -> false
     | (ComparF(f',_,g'), _ ) | (BoolF(f', _, g'),_) ->  aux f' true && aux g' true
     | (NotF(f'),_) -> aux f' true
     | (Variable(_),_) | (Number(_), _) | (Const(_),_) -> true
@@ -196,7 +196,7 @@ let is_prenex f =
   (* Step 1: We assume all formulas are in prenex form *)
   (* Step 2: Convert universal quantifier to existential quantifier while preserving the formula meaning *)
   let rec univ_to_exist f = match f with
-    | Quantif(Forall, v, f') -> notf (exists v (notf (univ_to_exist f')))
+    | QuantifF(Forall, v, f') -> notf (exists v (notf (univ_to_exist f')))
     | _ -> f
   ;;
 
@@ -216,10 +216,10 @@ print_formula (univ_to_exist example_univ);;
 
 (* Step 2.1 Put negations inside the formula *)
 let rec neg_inside f = match f with
-  | NotF(Quantif(Exists, v, f')) -> Quantif(Forall, v, neg_inside (NotF(f')))
-  | NotF(Quantif(Forall, v, f')) -> Quantif(Exists, v, neg_inside (NotF(f')))
+  | NotF(QuantifF(Exists, v, f')) -> QuantifF(Forall, v, neg_inside (NotF(f')))
+  | NotF(QuantifF(Forall, v, f')) -> QuantifF(Exists, v, neg_inside (NotF(f')))
   | NotF(NotF(f')) -> neg_inside f'
-  | Quantif(q, v, f') -> Quantif(q, v, neg_inside f')
+  | QuantifF(q, v, f') -> QuantifF(q, v, neg_inside f')
   | _ -> f
 ;;
 
@@ -259,7 +259,7 @@ print_formula (neg_inside example_neg_exist_2);;
 let rec neg_elim f = match f with
   | NotF(ComparF(g, Equal, h)) -> disj (lt g h) (lt h g)
   | NotF(ComparF(g, Lt, h)) -> disj (lt h g) (equal g h)
-  | Quantif(q, v, f') -> Quantif(q, v, neg_elim f')
+  | QuantifF(q, v, f') -> QuantifF(q, v, neg_elim f')
   | BoolF(f, op, g) -> BoolF(neg_elim f, op, neg_elim g)
   | _ -> f
 ;;

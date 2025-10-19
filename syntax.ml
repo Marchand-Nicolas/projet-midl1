@@ -56,6 +56,18 @@ module SyntaxTree = struct
 
   let rep_number = string_of_float;;
 
+  let top = Const(Top);;
+let bottom = Const(Bottom);;
+let forall v f = Quantif(Forall, v, f);;
+let exists v f = Quantif(Exists, v, f);;
+let equal f g = ComparF(f,Equal,g);;
+let lt f g = ComparF(f,Lt, g);;
+let notf f = NotF(f);;
+let conj f g = BoolF(f,Conj,g);;
+let disj f g = BoolF(f,Disj,g);;
+let implies f g = BoolF(f,Impl, g);;
+let var x = Variable(x);;
+
 end;;
 
 open Printf
@@ -76,17 +88,7 @@ let rec rep_formula = function
   | _ -> failwith("Erreur dans la représentation de la formule")
 ;;
 
-let top = Const(Top);;
-let bottom = Const(Bottom);;
-let forall v f = Quantif(Forall, v, f);;
-let exists v f = Quantif(Exists, v, f);;
-let equal f g = ComparF(f,Equal,g);;
-let lt f g = ComparF(f,Lt, g);;
-let notf f = NotF(f);;
-let conj f g = BoolF(f,Conj,g);;
-let disj f g = BoolF(f,Disj,g);;
-let implies f g = BoolF(f,Impl, g);;
-let var x = Variable(x);;
+
 
 let rec print_formula f = print_string (rep_formula f ^ "\n");;
 

@@ -21,6 +21,7 @@ module SyntaxTree = struct
   type quantif =
     | Exists
     | Forall
+  ;;
 
   type formula =
     | Const of bool_const
@@ -200,16 +201,16 @@ print_formula example_univ;;
 print_string "Example univ to exist: ";;
 print_formula (univ_to_exist example_univ);;
 
-(* Step 2.1 Put negations inside the formula *)
-let rec neg_normal_form f = match f with
-  | NotF(QuantifF(Exists, v, f')) -> QuantifF(Forall, v, neg_normal_form (NotF(f')))
-  | NotF(QuantifF(Forall, v, f')) -> QuantifF(Exists, v, neg_normal_form (NotF(f')))
-  | NotF(NotF(f')) -> neg_normal_form f'
-  | QuantifF(q, v, f') -> QuantifF(q, v, neg_normal_form f')
+(* Step 2.1 Put negations inside the formula (negation normal form) *)
+let rec neg_nf f = match f with
+  | NotF(QuantifF(Exists, v, f')) -> QuantifF(Forall, v, neg_nf (NotF(f')))
+  | NotF(QuantifF(Forall, v, f')) -> QuantifF(Exists, v, neg_nf (NotF(f')))
+  | NotF(NotF(f')) -> neg_nf f'
+  | QuantifF(q, v, f') -> QuantifF(q, v, neg_nf f')
   | _ -> f
 ;;
 
-let example_neg_normal_form =
+let example_neg_nf =
   notf (exists (var "x") (
     lt (var "x") (var "y")
   ))
@@ -225,7 +226,7 @@ print_string "Example neg exist: ";;
 print_formula example_neg_exist;;
 
 print_string "Example neg inside: ";;
-print_formula (neg_normal_form example_neg_exist);;
+print_formula (neg_nf example_neg_exist);;
 
 let example_neg_exist_2 =
   notf (exists (var "x") (
@@ -239,7 +240,8 @@ print_string "Example neg exist 2: ";;
 print_formula example_neg_exist_2;;
 
 print_string "Example neg inside 2: ";;
-print_formula (neg_normal_form example_neg_exist_2);;
+print_formula (neg_nf example_neg_exist_2);;
+
 
 (* Step 2.2: Eliminate negations in front of relations *)
 let rec neg_elim f = match f with
@@ -269,3 +271,47 @@ print_formula example_relation_formula_2;;
 
 print_string "Example neg elim 2: ";;
 print_formula (neg_elim example_relation_formula_2);;
+
+
+(* Step 2.3: Transform into disjunctive normal form *)
+let rec disj_nf f = match f with
+  | BoolF(g, Impl, h) -> disj_nf (BoolF(NotF g, Disj, g))
+  | BoolF(BoolF(g, Disj, h), Conj, j) -> BoolF(disj_nf (BoolF(g, Conj, j)), Disj, disj_nf (BoolF(h, Conj, j)))
+  | BoolF(g, Conj, BoolF(h, Disj, j)) -> BoolF(disj_nf (BoolF(g, Conj, h)), Disj, disj_nf (BoolF(g, Conj, j)))
+  | QuantifF (q, v, f') -> QuantifF (q, v, disj_nf f')
+  | _ -> f
+;;
+
+let example_distributive_law =
+  BoolF(ComparF(var "x", Equal, var "y"), Conj, BoolF(ComparF(var "x", Lt, var "z"), Disj, ComparF(var "y", Lt, var "z")))
+;;
+
+print_string "Example distributive law: ";;
+print_formula example_distributive_law;;
+
+print_string "Example disj_nf: ";;
+print_formula (disj_nf example_distributive_law);;
+
+let example_conj_nf =
+  BoolF(
+    BoolF(ComparF(var "x", Equal, var "y"), Disj, ComparF(var "x", Lt, var "y")),
+      Conj,
+    BoolF(ComparF(var "y", Equal, var "z"), Disj, ComparF(var "y", Lt, var "z"))
+  )
+;;
+
+print_string "Example conjunctive normal form: ";;
+print_formula example_conj_nf;;
+
+print_string "Example disj_nf from conjunctive normal form: ";;
+print_formula (disj_nf example_conj_nf);;
+
+let example_quantif_implies =
+  QuantifF(Exists, var "x", QuantifF(Forall, var "y", BoolF(ComparF(var "x", Lt, var "y"), Impl, ComparF(var "x", Equal, var "y"))))
+;;
+
+print_string "Example quantificators and implication: ";;
+print_formula example_quantif_implies;;
+
+print_string "Example disj_nf with quantificators and implication: ";;
+print_formula (disj_nf example_quantif_implies);;

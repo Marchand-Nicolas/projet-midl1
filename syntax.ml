@@ -88,18 +88,6 @@ let rec rep_formula = function
   | _ -> failwith("Erreur dans la représentation de la formule")
 ;;
 
-let top = Const(Top);;
-let bottom = Const(Bottom);;
-let forall v f = QuantifF(Forall, v, f);;
-let exists v f = QuantifF(Exists, v, f);;
-let equal f g = ComparF(f,Equal,g);;
-let lt f g = ComparF(f,Lt, g);;
-let notf f = NotF(f);;
-let conj f g = BoolF(f,Conj,g);;
-let disj f g = BoolF(f,Disj,g);;
-let implies f g = BoolF(f,Impl, g);;
-let var x = Variable(x);;
-
 let rec print_formula f = print_string (rep_formula f ^ "\n");;
 
 (*
@@ -128,20 +116,6 @@ let dual f =
     | QuantifF(Forall, v, f') -> notf (exists v (notf (univ_to_exist f')))
     | _ -> f
   ;;
-
-let example_univ =
-  forall (var "x") (
-    exists (var "y") (
-      lt (var "x") (var "y")
-    )
-  )
-;;
-
-print_string "Example univ: ";;
-print_formula example_univ;;
-
-print_string "Example univ to exist: ";;
-print_formula (univ_to_exist example_univ);;
 
 
 (* 
@@ -227,15 +201,15 @@ print_string "Example univ to exist: ";;
 print_formula (univ_to_exist example_univ);;
 
 (* Step 2.1 Put negations inside the formula *)
-let rec neg_inside f = match f with
-  | NotF(QuantifF(Exists, v, f')) -> QuantifF(Forall, v, neg_inside (NotF(f')))
-  | NotF(QuantifF(Forall, v, f')) -> QuantifF(Exists, v, neg_inside (NotF(f')))
-  | NotF(NotF(f')) -> neg_inside f'
-  | QuantifF(q, v, f') -> QuantifF(q, v, neg_inside f')
+let rec neg_normal_form f = match f with
+  | NotF(QuantifF(Exists, v, f')) -> QuantifF(Forall, v, neg_normal_form (NotF(f')))
+  | NotF(QuantifF(Forall, v, f')) -> QuantifF(Exists, v, neg_normal_form (NotF(f')))
+  | NotF(NotF(f')) -> neg_normal_form f'
+  | QuantifF(q, v, f') -> QuantifF(q, v, neg_normal_form f')
   | _ -> f
 ;;
 
-let example_neg_inside =
+let example_neg_normal_form =
   notf (exists (var "x") (
     lt (var "x") (var "y")
   ))
@@ -251,7 +225,7 @@ print_string "Example neg exist: ";;
 print_formula example_neg_exist;;
 
 print_string "Example neg inside: ";;
-print_formula (neg_inside example_neg_exist);;
+print_formula (neg_normal_form example_neg_exist);;
 
 let example_neg_exist_2 =
   notf (exists (var "x") (
@@ -265,7 +239,7 @@ print_string "Example neg exist 2: ";;
 print_formula example_neg_exist_2;;
 
 print_string "Example neg inside 2: ";;
-print_formula (neg_inside example_neg_exist_2);;
+print_formula (neg_normal_form example_neg_exist_2);;
 
 (* Step 2.2: Eliminate negations in front of relations *)
 let rec neg_elim f = match f with

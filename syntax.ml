@@ -316,43 +316,21 @@ print_formula example_conj_nf;;
 print_string "Example disj_nf from conjunctive normal form: ";;
 print_formula (disj_nf example_conj_nf);;
 
+(* Step 2.4 : Pushing exists within the disjunction *)
+let rec push_exists f = match f with
+  | QuantifF(Exists, x, BoolF(g, Disj, h)) -> (* Cas où la propagation s'effectue *) 
+      let new_g = push_exists (exists x g) in
+      let new_h = push_exists (exists x h) in
+      disj new_g new_h
 
-
-let () = 
-  print_string "========\n Full test \n========\n";
-  let example_formula =
-    forall (var "x") (
-      forall (var "y") (
-        forall (var "z") (
-          exists (var "u") (
-            implies (
-              conj (
-                lt (var "x") (var "y")
-              )
-              (
-                lt (var "x") (var "z")
-              )
-            )
-            (
-              conj(
-                lt (var "y") (var "u")
-              )
-              (
-                lt (var "z") (var "u")
-              )
-            )
-          )
-        ) 
+  | QuantifF(Exists, x, f') -> (*On regarde si après avoir poussé un exists on a pas une disjonction qui apparait*)
+      let inside = push_exists f' in
+      (
+        match inside with
+        | BoolF(_, Disj, _) -> push_exists (QuantifF(Exists, x, inside))
+        | _ -> QuantifF(Exists, x, inside)
       )
-    ) in
-  let example_nnf = neg_nf example_formula in
-  let example_neg_elim = neg_elim example_nnf in
-  let example_dnf = disj_nf example_neg_elim in
-  print_string "Example formula :\n";
-  print_formula example_formula;
-  print_string "Step 2.1 Negative Normal Form :\n";
-  print_formula example_nnf;
-  print_string "Step 2.2 Formula with eliminated negations :\n";
-  print_formula example_neg_elim;
-  print_string "Step 2.3 Disjunctive Normal Form :\n";
-  print_formula example_dnf;
+  
+  | BoolF(g, op, h) -> BoolF(push_exists g, op, push_exists h)
+  | _ -> f
+;;

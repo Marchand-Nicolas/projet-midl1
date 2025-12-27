@@ -15,7 +15,6 @@ module SyntaxTree = struct
   type bool_op =
     | Conj 
     | Disj
-    | Impl
   ;;
 
   type quantif =
@@ -50,7 +49,6 @@ module SyntaxTree = struct
   let rep_bool_op = function
     | Conj -> "∧"
     | Disj -> "∨"
-    | Impl -> "->"
   ;;
 
   let rep_not = "¬";;
@@ -66,7 +64,7 @@ let lt f g = ComparF(f,Lt, g);;
 let notf f = NotF(f);;
 let conj f g = BoolF(f,Conj,g);;
 let disj f g = BoolF(f,Disj,g);;
-let implies f g = BoolF(f,Impl, g);;
+let implies f g = BoolF(notf f,Disj, g);;
 let var x = Variable(x);;
 
 end;;
@@ -101,7 +99,6 @@ let dual f =
   let dual_op = function
     | Conj -> Disj
     | Disj -> Conj
-    | x -> x
   in
   let rec aux f = match f with
     | Variable _ | Const _ | Number _ -> f
@@ -121,11 +118,10 @@ let dual f =
 
 (* 
 signature : 
-  is_prenex : formula -> bool 
+  is_prenex : formula -> bool
 
 Cette fonction renvoie Vrai si la formule passée en paramètres est vraie, faux sinon.
 *)
-
 
 let is_prenex f =
   let rec aux f met_smth = match (f, met_smth) with
@@ -207,6 +203,9 @@ let rec neg_nf f = match f with
   | NotF(QuantifF(Forall, v, f')) -> QuantifF(Exists, v, neg_nf (NotF(f')))
   | NotF(NotF(f')) -> neg_nf f'
   | QuantifF(q, v, f') -> QuantifF(q, v, neg_nf f')
+  | NotF(BoolF(g, Conj, h)) -> BoolF(neg_nf (NotF g), Disj, neg_nf (NotF h)) (* Loi de De Morgan *)
+  | NotF(BoolF(g, Disj, h)) -> BoolF(neg_nf (NotF g), Conj, neg_nf (NotF h)) (* Loi de De Morgan *)
+  | BoolF(g, op, h) -> BoolF(neg_nf g, op, neg_nf h)
   | _ -> f
 ;;
 
@@ -275,11 +274,22 @@ print_formula (neg_elim example_relation_formula_2);;
 
 (* Step 2.3: Transform into disjunctive normal form *)
 let rec disj_nf f = match f with
-  | BoolF(g, Impl, h) -> disj_nf (BoolF(NotF g, Disj, g))
-  | BoolF(BoolF(g, Disj, h), Conj, j) -> BoolF(disj_nf (BoolF(g, Conj, j)), Disj, disj_nf (BoolF(h, Conj, j)))
-  | BoolF(g, Conj, BoolF(h, Disj, j)) -> BoolF(disj_nf (BoolF(g, Conj, h)), Disj, disj_nf (BoolF(g, Conj, j)))
   | QuantifF (q, v, f') -> QuantifF (q, v, disj_nf f')
-  | _ -> f
+  | BoolF(g, op, h) ->
+      let g_nf = disj_nf g in
+      let h_nf = disj_nf h in
+        (
+          match (g_nf, op, h_nf) with
+          | (BoolF(g1, Disj, g2), Conj, _) -> (* Cas 1 : (A or B) and C  ~> (A and C) or (B and C) *) 
+            disj_nf (BoolF(BoolF(g1, Conj, h_nf), Disj, BoolF(g2, Conj, h_nf)))
+          
+          | (_, Conj, BoolF(h1, Disj, h2)) -> (* Cas 2 : A and (B or C) ~> (A and B) or (A and C) *)
+            disj_nf (BoolF(BoolF(g_nf, Conj, h1), Disj, BoolF(g_nf, Conj, h2)))
+
+          | _ -> BoolF(g_nf, op, h_nf)
+        )
+      
+  | _ -> f  
 ;;
 
 let example_distributive_law =
@@ -306,12 +316,43 @@ print_formula example_conj_nf;;
 print_string "Example disj_nf from conjunctive normal form: ";;
 print_formula (disj_nf example_conj_nf);;
 
-let example_quantif_implies =
-  QuantifF(Exists, var "x", QuantifF(Forall, var "y", BoolF(ComparF(var "x", Lt, var "y"), Impl, ComparF(var "x", Equal, var "y"))))
-;;
 
-print_string "Example quantificators and implication: ";;
-print_formula example_quantif_implies;;
 
-print_string "Example disj_nf with quantificators and implication: ";;
-print_formula (disj_nf example_quantif_implies);;
+let () = 
+  print_string "========\n Full test \n========\n";
+  let example_formula =
+    forall (var "x") (
+      forall (var "y") (
+        forall (var "z") (
+          exists (var "u") (
+            implies (
+              conj (
+                lt (var "x") (var "y")
+              )
+              (
+                lt (var "x") (var "z")
+              )
+            )
+            (
+              conj(
+                lt (var "y") (var "u")
+              )
+              (
+                lt (var "z") (var "u")
+              )
+            )
+          )
+        ) 
+      )
+    ) in
+  let example_nnf = neg_nf example_formula in
+  let example_neg_elim = neg_elim example_nnf in
+  let example_dnf = disj_nf example_neg_elim in
+  print_string "Example formula :\n";
+  print_formula example_formula;
+  print_string "Step 2.1 Negative Normal Form :\n";
+  print_formula example_nnf;
+  print_string "Step 2.2 Formula with eliminated negations :\n";
+  print_formula example_neg_elim;
+  print_string "Step 2.3 Disjunctive Normal Form :\n";
+  print_formula example_dnf;

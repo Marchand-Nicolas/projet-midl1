@@ -22,14 +22,16 @@ module SyntaxTree = struct
     | Forall
   ;;
 
+  type term = 
+    | Var of string
+    | Val of float
+
   type formula =
     | Const of bool_const
-    | Variable of string
-    | Number of float
-    | ComparF of formula * compar_op * formula
+    | ComparF of term * compar_op * term
     | BoolF of formula * bool_op * formula
     | NotF of formula
-    | QuantifF of quantif * formula * formula
+    | QuantifF of quantif * term * formula
   ;;
 
   let rep_quantif = function
@@ -65,25 +67,29 @@ let notf f = NotF(f);;
 let conj f g = BoolF(f,Conj,g);;
 let disj f g = BoolF(f,Disj,g);;
 let implies f g = BoolF(notf f,Disj, g);;
-let var x = Variable(x);;
+let var x = Var(x);;
+
+let _val x = Val(x);;
 
 end;;
 
 open Printf
 open SyntaxTree
 
+let rep_term = function
+  | Var x -> x
+  | Val x -> string_of_float x
+
 let rec rep_formula = function
   | Const c -> rep_const c
   | ComparF(f, op, g) -> sprintf
-  "(%s %s %s)" (rep_formula f) (rep_comp_op op) (rep_formula g)
+  "(%s %s %s)" (rep_term f) (rep_comp_op op) (rep_term g)
   | BoolF(f, op, g) -> sprintf
   "(%s %s %s)" (rep_formula f) (rep_bool_op op) (rep_formula g)
   | NotF f -> sprintf
   "%s%s" rep_not (rep_formula f)
-  | QuantifF(q, Variable v, f) -> sprintf
-  "(%s%s.%s)" (rep_quantif q) v (rep_formula f)
-  | Variable v -> v
-  | Number n -> rep_number n
+  | QuantifF(q, v, f) -> sprintf
+    "(%s%s.%s)" (rep_quantif q) (rep_term v) (rep_formula f)
   | _ -> failwith("Erreur dans la représentation de la formule")
 ;;
 
@@ -105,9 +111,8 @@ let dual f =
     | QuantifF(Forall, v, f') -> QuantifF(Forall,v, aux f')
     | QuantifF(Exists, v, f') -> QuantifF(Exists, v, aux f')
     | NotF(f') -> NotF(aux f')
-    | ComparF(f',Equal,g') -> ComparF(aux f', Equal, aux g')
-    | ComparF(f',Lt, g') -> ComparF(aux f', Lt, aux g')
     | BoolF(f', op, g') -> BoolF(f', dual_op op, g') 
+    | _ -> f
   in aux f;;
 
   let rec univ_to_exist = function
@@ -125,11 +130,11 @@ Cette fonction renvoie vrai si la formule passée en paramètres est sous forme 
 
 let is_prenex f =
   let rec aux f met_smth = match (f, met_smth) with
-    | (QuantifF(q, Variable v, f'),false) -> aux f' false
-    | (QuantifF(q, Variable v, f'), true) -> false
-    | (ComparF(f',_,g'), _ ) | (BoolF(f', _, g'),_) ->  aux f' true && aux g' true
+    | (QuantifF(q, _, f'),false) -> aux f' false
+    | (QuantifF(q, _, f'), true) -> false
+    | (BoolF(f', _, g'),_) ->  aux f' true && aux g' true
     | (NotF(f'),_) -> aux f' true
-    | (Variable(_),_) | (Number(_), _) | (Const(_),_) -> true
+    | (Const _, _) | (ComparF _, _) -> true
     | _, _ -> false
   in aux f false
   ;;

@@ -120,7 +120,7 @@ let dual f =
 signature : 
   is_prenex : formula -> bool
 
-Cette fonction renvoie Vrai si la formule passée en paramètres est vraie, faux sinon.
+Cette fonction renvoie vrai si la formule passée en paramètres est sous forme prénexe, faux sinon.
 *)
 
 let is_prenex f =

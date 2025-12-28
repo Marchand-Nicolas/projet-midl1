@@ -100,7 +100,7 @@ let dual f =
     | Conj -> Disj
     | Disj -> Conj
   in
-  let rec aux f = match f with
+  let rec aux = function
     | Variable _ | Const _ | Number _ -> f
     | QuantifF(Forall, v, f') -> QuantifF(Forall,v, aux f')
     | QuantifF(Exists, v, f') -> QuantifF(Exists, v, aux f')
@@ -110,9 +110,9 @@ let dual f =
     | BoolF(f', op, g') -> BoolF(f', dual_op op, g') 
   in aux f;;
 
-  let rec univ_to_exist f = match f with
+  let rec univ_to_exist = function
     | QuantifF(Forall, v, f') -> notf (exists v (notf (univ_to_exist f')))
-    | _ -> f
+    | f -> f
   ;;
 
 
@@ -178,9 +178,9 @@ let is_prenex f =
 
   (* Step 1: We assume all formulas are in prenex form *)
   (* Step 2: Convert universal quantifier to existential quantifier while preserving the formula meaning *)
-  let rec univ_to_exist f = match f with
+  let rec univ_to_exist = function 
     | QuantifF(Forall, v, f') -> notf (exists v (notf (univ_to_exist f')))
-    | _ -> f
+    | f -> f
   ;;
 
 let example_univ =
@@ -198,7 +198,7 @@ print_string "Example univ to exist: ";;
 print_formula (univ_to_exist example_univ);;
 
 (* Step 2.1 Put negations inside the formula (negation normal form) *)
-let rec neg_nf f = match f with
+let rec neg_nf = function
   | NotF(QuantifF(Exists, v, f')) -> QuantifF(Forall, v, neg_nf (NotF(f')))
   | NotF(QuantifF(Forall, v, f')) -> QuantifF(Exists, v, neg_nf (NotF(f')))
   | NotF(NotF(f')) -> neg_nf f'
@@ -206,7 +206,7 @@ let rec neg_nf f = match f with
   | NotF(BoolF(g, Conj, h)) -> BoolF(neg_nf (NotF g), Disj, neg_nf (NotF h)) (* Loi de De Morgan *)
   | NotF(BoolF(g, Disj, h)) -> BoolF(neg_nf (NotF g), Conj, neg_nf (NotF h)) (* Loi de De Morgan *)
   | BoolF(g, op, h) -> BoolF(neg_nf g, op, neg_nf h)
-  | _ -> f
+  | f -> f
 ;;
 
 let example_neg_nf =
@@ -243,12 +243,12 @@ print_formula (neg_nf example_neg_exist_2);;
 
 
 (* Step 2.2: Eliminate negations in front of relations *)
-let rec neg_elim f = match f with
+let rec neg_elim = function
   | NotF(ComparF(g, Equal, h)) -> disj (lt g h) (lt h g)
   | NotF(ComparF(g, Lt, h)) -> disj (lt h g) (equal g h)
   | QuantifF(q, v, f') -> QuantifF(q, v, neg_elim f')
   | BoolF(f, op, g) -> BoolF(neg_elim f, op, neg_elim g)
-  | _ -> f
+  | f -> f
 ;;
 
 let example_relation_formula =
@@ -273,7 +273,7 @@ print_formula (neg_elim example_relation_formula_2);;
 
 
 (* Step 2.3: Transform into disjunctive normal form *)
-let rec disj_nf f = match f with
+let rec disj_nf = function
   | QuantifF (q, v, f') -> QuantifF (q, v, disj_nf f')
   | BoolF(g, op, h) ->
       let g_nf = disj_nf g in
@@ -289,7 +289,7 @@ let rec disj_nf f = match f with
           | _ -> BoolF(g_nf, op, h_nf)
         )
       
-  | _ -> f  
+  | f -> f  
 ;;
 
 let example_distributive_law =
@@ -317,7 +317,7 @@ print_string "Example disj_nf from conjunctive normal form: ";;
 print_formula (disj_nf example_conj_nf);;
 
 (* Step 2.4 : Pushing exists within the disjunction *)
-let rec push_exists f = match f with
+let rec push_exists = function
   | QuantifF(Exists, x, BoolF(g, Disj, h)) -> (* Cas où la propagation s'effectue *) 
       let new_g = push_exists (exists x g) in
       let new_h = push_exists (exists x h) in
@@ -332,5 +332,5 @@ let rec push_exists f = match f with
       )
   
   | BoolF(g, op, h) -> BoolF(push_exists g, op, push_exists h)
-  | _ -> f
+  | f -> f
 ;;

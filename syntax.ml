@@ -107,7 +107,6 @@ let dual f =
     | Disj -> Conj
   in
   let rec aux = function
-    | Variable _ | Const _ | Number _ -> f
     | QuantifF(Forall, v, f') -> QuantifF(Forall,v, aux f')
     | QuantifF(Exists, v, f') -> QuantifF(Exists, v, aux f')
     | NotF(f') -> NotF(aux f')

@@ -350,3 +350,34 @@ print_string "Example push_exists: ";;
 print_formula (push_exists example_exist_outside_disj);;
 
 (* Step 3: Remove variable *)
+
+(* 
+signature : 
+  check_var : string -> formula -> int
+
+Cette fonction vérifie la présence de la variable v (supposément introduite dans un quantificateur) dans une comparaison
+Cette fonction renvoie:
+  2 si la comparaison est v < v
+  1 si v est présent d'une autre manière dans la comparaison
+  0 sinon
+*)
+
+let check_var v = function
+  | ComparF(x, Lt, y) -> if (x = var v || y = var v) then
+    if (x = y) then 2 else 1
+    else 0
+  | ComparF(x, Equal, y) -> if (x = var v || y = var v) then 1 else 0
+  | _ -> failwith "formula must be ComparF"
+;;
+
+print_string "Example check_var (x < x): ";;
+print_string (sprintf "%d" (check_var "x" (lt (var "x") (var "x"))) ^ "\n");;
+
+print_string "Example check_var (x < y): ";;
+print_string (sprintf "%d" (check_var "x" (lt (var "x") (var "y"))) ^ "\n");;
+
+print_string "Example check_var (x = y): ";;
+print_string (sprintf "%d" (check_var "x" (equal (var "x") (var "y"))) ^ "\n");;
+
+print_string "Example check_var (without x): ";;
+print_string (sprintf "%d" (check_var "x" (lt (var "y") (var "z"))) ^ "\n");;

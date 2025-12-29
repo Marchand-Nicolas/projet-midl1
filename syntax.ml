@@ -359,25 +359,52 @@ Cette fonction vérifie la présence de la variable v (supposément introduite d
 Cette fonction renvoie:
   2 si la comparaison est v < v
   1 si v est présent d'une autre manière dans la comparaison
-  0 sinon
+  0 sinon (v absent)
 *)
 
 let check_var v = function
   | ComparF(x, Lt, y) -> if (x = var v || y = var v) then
-    if (x = y) then 2 else 1
-    else 0
+      if (x = y) then 2 else 1
+      else 0
   | ComparF(x, Equal, y) -> if (x = var v || y = var v) then 1 else 0
-  | _ -> failwith "formula must be ComparF"
+  | f -> failwith "formula must be ComparF"
 ;;
 
-print_string "Example check_var (x < x): ";;
-print_string (sprintf "%d" (check_var "x" (lt (var "x") (var "x"))) ^ "\n");;
+print_string (sprintf "Example check_var (x < x): %d" (check_var "x" (lt (var "x") (var "x"))) ^ "\n");;
+print_string (sprintf "Example check_var (x < y): %d" (check_var "x" (lt (var "x") (var "y"))) ^ "\n");;
+print_string (sprintf "Example check_var (x = y): %d" (check_var "x" (equal (var "x") (var "y"))) ^ "\n");;
+print_string (sprintf "Example check_var (without x): %d" (check_var "x" (lt (var "y") (var "z"))) ^ "\n");;
 
-print_string "Example check_var (x < y): ";;
-print_string (sprintf "%d" (check_var "x" (lt (var "x") (var "y"))) ^ "\n");;
+(* 
+signature : 
+  check_var : string -> formula -> int
 
-print_string "Example check_var (x = y): ";;
-print_string (sprintf "%d" (check_var "x" (equal (var "x") (var "y"))) ^ "\n");;
+Cette fonction vérifie la présence de la variable v (supposément introduite dans un quantificateur) dans une conjonction
+Cette fonction renvoie:
+  2 si la conjonction contient v < v
+  1 si v est présent d'une autre manière dans la conjonction
+  0 sinon (v absent)
+*)
 
-print_string "Example check_var (without x): ";;
-print_string (sprintf "%d" (check_var "x" (lt (var "y") (var "z"))) ^ "\n");;
+let rec check_conj v = function
+  | BoolF(f, Conj, g) -> let fres = check_var v f in
+    let gres = check_var v g in
+      if (fres = 2 || gres = 2) then 2 else
+        if (fres = 1 || gres = 1) then 1 else 0
+  | f -> failwith "formula must be conjunction"
+;;
+
+print_string (sprintf "Example check_conj (x < x): %d" (check_conj "x" (conj (lt (var "x") (var "x")) (lt (var "x") (var "y")))) ^ "\n");;
+print_string (sprintf "Example check_conj (x present): %d" (check_conj "x" (conj (equal (var "x") (var "x")) (lt (var "x") (var "y")))) ^ "\n");;
+print_string (sprintf "Example check_conj (x absent): %d" (check_conj "x" (conj (equal (var "y") (var "y")) (lt (var "z") (var "y")))) ^ "\n");;
+
+(*
+remove_var traite les cas 1 et 2 et sinon lance le traitement des autres cas
+
+let remove_var = function
+  | QuantifF(Exists, v, f) -> let result = check_conj v f in if result = 2 then bottom
+      else if result = 0 then f
+      else treat_regrouped (regroup QuantifF(Exists, v, f))
+  | f -> f
+;;
+*)

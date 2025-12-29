@@ -31,7 +31,7 @@ module SyntaxTree = struct
     | ComparF of term * compar_op * term
     | BoolF of formula * bool_op * formula
     | NotF of formula
-    | QuantifF of quantif * term * formula
+    | QuantifF of quantif * string * formula
   ;;
 
   let rep_quantif = function
@@ -89,8 +89,7 @@ let rec rep_formula = function
   | NotF f -> sprintf
   "%s%s" rep_not (rep_formula f)
   | QuantifF(q, v, f) -> sprintf
-    "(%s%s.%s)" (rep_quantif q) (rep_term v) (rep_formula f)
-  | _ -> failwith("Erreur dans la représentation de la formule")
+    "(%s%s.%s)" (rep_quantif q) v (rep_formula f)
 ;;
 
 let rec print_formula f = print_string (rep_formula f ^ "\n");;
@@ -134,23 +133,22 @@ let is_prenex f =
     | (BoolF(f', _, g'),_) ->  aux f' true && aux g' true
     | (NotF(f'),_) -> aux f' true
     | (Const _, _) | (ComparF _, _) -> true
-    | _, _ -> false
   in aux f false
   ;;
 
 
   let example_1 = 
-    forall (var "x") (
-      exists (var "y") (
+    forall "x" (
+      exists "y" (
         lt (var "x") (var "y")
       )
     );;
   
   let example_2 = 
-    forall (var "x") (
-      forall (var "y") (
-        forall (var "z") (
-          exists (var "u") (
+    forall "x" (
+      forall "y" (
+        forall "z" (
+          exists "u" (
             implies (
               conj (
                 lt (var "x") (var "y")
@@ -188,8 +186,8 @@ let is_prenex f =
   ;;
 
 let example_univ =
-  forall (var "x") (
-    exists (var "y") (
+  forall "x" (
+    exists "y" (
       lt (var "x") (var "y")
     )
   )
@@ -214,13 +212,13 @@ let rec neg_nf = function
 ;;
 
 let example_neg_nf =
-  notf (exists (var "x") (
+  notf (exists "x" (
     lt (var "x") (var "y")
   ))
 ;;
 
 let example_neg_exist =
-  notf (exists (var "x") (
+  notf (exists "x" (
     lt (var "x") (var "y")
   ))
 ;;
@@ -232,8 +230,8 @@ print_string "Example neg inside: ";;
 print_formula (neg_nf example_neg_exist);;
 
 let example_neg_exist_2 =
-  notf (exists (var "x") (
-    notf (exists (var "y") (
+  notf (exists "x" (
+    notf (exists "y" (
       lt (var "x") (var "y")
     ))
   ))
@@ -338,3 +336,17 @@ let rec push_exists = function
   | BoolF(g, op, h) -> BoolF(push_exists g, op, push_exists h)
   | f -> f
 ;;
+
+let example_exist_outside_disj =
+  exists "x" (
+    (disj_nf example_conj_nf)
+  )
+  ;;
+
+print_string "Example exists outside disj: ";;
+print_formula example_exist_outside_disj;;
+
+print_string "Example push_exists: ";;
+print_formula (push_exists example_exist_outside_disj);;
+
+(* Step 3: Remove variable *)

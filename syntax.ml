@@ -377,7 +377,7 @@ print_string (sprintf "Example check_var (without x): %d" (check_var "x" (lt (va
 
 (* 
 signature : 
-  check_var : string -> formula -> int
+  check_conj : string -> formula -> int
 
 Cette fonction vérifie la présence de la variable v (supposément introduite dans un quantificateur) dans une conjonction
 Cette fonction renvoie:

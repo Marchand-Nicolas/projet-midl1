@@ -408,3 +408,27 @@ let remove_var = function
   | f -> f
 ;;
 *)
+
+(* Steps 3.3+: non triviaux. On convertit la disjonction tableau, pour réaliser les étapes suivantes plus facilement *)
+
+(*
+signature : 
+  convert_disj_to_list: formula (disj) -> array
+
+Prend en paramètre une formule selon le format renvoyé par push_exists et renvoie la même information sous la forme d'un tableau.
+*)
+
+let rec convert_disj_to_list = function
+  | BoolF(g, Disj, h) ->
+      (convert_disj_to_list g) @ (convert_disj_to_list h)
+  | f -> [f]
+;;
+
+(* Debug functions *)
+let print_formula_list_line f = print_string (rep_formula f ^ "," ^ "\n");;
+let print_formula_list l = print_string "["; List.iter (print_formula_list_line) l; print_string "]";;
+
+print_string "Example convert_disj_to_list: ";;
+print_formula (push_exists example_exist_outside_disj);;
+print_string "---> ";;
+print_formula_list (convert_disj_to_list (push_exists example_exist_outside_disj));;

@@ -411,24 +411,111 @@ let remove_var = function
 
 (* Steps 3.3+: non triviaux. On convertit la disjonction tableau, pour réaliser les étapes suivantes plus facilement *)
 
-(*
-signature : 
-  convert_disj_to_list: formula (disj) -> array
+(* Structure stockant les disjonctions classées par type de contrainte sur la variable quantifiée *)
+type step3_result = {
+  inf: formula list;  (* Cas a < x *)
+  sup: formula list;  (* Cas x < b *)
+  eq: formula list;    (* Cas x = c *)
+  independent: formula list;   (* Conditions ne dépendant pas de x *)
+}
 
-Prend en paramètre une formule selon le format renvoyé par push_exists et renvoie la même information sous la forme d'un tableau.
-*)
+let empty_step3_result = { inf = []; sup = []; eq = []; independent = [] }
 
-let rec convert_disj_to_list = function
-  | BoolF(g, Disj, h) ->
-      (convert_disj_to_list g) @ (convert_disj_to_list h)
-  | f -> [f]
-;;
+(* Sépare une conjonction en deux : (formule_avec_v, formule_sans_v) *)
+let rec split_conjunction_by_var target_var formula =
+  match formula with
+  | BoolF(left, Conj, right) ->
+      let (left_with_var, left_independent) = split_conjunction_by_var target_var left in
+      let (right_with_var, right_independent) = split_conjunction_by_var target_var right in
+      
+      (* Reconstruit une conjonction uniquement si les deux parties existent *)
+      let combine_parts opt_a opt_b = 
+        match opt_a, opt_b with
+        | None, None -> None
+        | Some a, None -> Some a
+        | None, Some b -> Some b
+        | Some a, Some b -> Some (conj a b)
+      in
+      (combine_parts left_with_var right_with_var, combine_parts left_independent right_independent)
+      
+  | atom ->
+      let depends_on_var = match atom with
+        | ComparF(Var x, _, _) -> x = target_var
+        | ComparF(_, _, Var x) -> x = target_var
+        | _ -> false
+      in
+      if depends_on_var then (Some atom, None) else (None, Some atom)
+
+(* Détermine la catégorie d'une contrainte sur x (x < b, a < x, ou x = c) *)
+let rec classify_x_constraint target_var formula =
+  match formula with
+  | ComparF(Var x, Lt, _) when x = target_var -> `Sup   (* x < b *)
+  | ComparF(_, Lt, Var x) when x = target_var -> `Inf   (* a < x *)
+  | ComparF(Var x, Equal, _) when x = target_var -> `Eq (* x = c *)
+  | ComparF(_, Equal, Var x) when x = target_var -> `Eq (* c = x *)
+  | BoolF(left, Conj, _) -> classify_x_constraint target_var left (* On descend pour trouver la variable *)
+  | _ -> `Other
+
+(* Transforme une structure de disjonctions imbriquées en une liste plate *)
+let rec flatten_disjunctions = function
+  | BoolF(left, Disj, right) ->
+      (flatten_disjunctions left) @ (flatten_disjunctions right)
+  | formula -> [formula]
+
+(* Cherche la première variable quantifiée par un "Existe" dans la liste *)
+let rec find_quantified_variable = function
+  | [] -> None
+  | QuantifF(Exists, var_name, _) :: _ -> Some var_name
+  | _ :: remaining -> find_quantified_variable remaining
+
+let convert_disj_to_list formula =
+  let disjunct_list = flatten_disjunctions formula in
+  let quantified_var_opt = find_quantified_variable disjunct_list in
+  
+  match quantified_var_opt with
+  | None -> { empty_step3_result with independent = disjunct_list }
+  | Some target_var ->
+      List.fold_left (fun acc current_f ->
+        match current_f with
+        | QuantifF(Exists, x, body) when x = target_var ->
+            (* On sépare le corps de l'existentiel en (ce qui dépend de x, ce qui n'en dépend pas) *)
+            let (part_with_x, part_independent) = split_conjunction_by_var target_var body in
+            
+            (* On ajoute la partie indépendante de x à la catégorie 'independent' *)
+            let acc = match part_independent with
+              | Some independent_formula -> { acc with independent = independent_formula :: acc.independent }
+              | None -> acc
+            in
+            
+            (* On classe la partie qui dépend de x dans la bonne catégorie *)
+            (match part_with_x with
+             | None -> acc
+             | Some with_x_formula ->
+                match classify_x_constraint target_var with_x_formula with
+                | `Inf -> { acc with inf = (exists target_var with_x_formula) :: acc.inf }
+                | `Sup -> { acc with sup = (exists target_var with_x_formula) :: acc.sup }
+                | `Eq -> { acc with eq = (exists target_var with_x_formula) :: acc.eq }
+                | `Other -> { acc with independent = (exists target_var with_x_formula) :: acc.independent }
+            )
+        | other_formula -> 
+            { acc with independent = other_formula :: acc.independent }
+      ) empty_step3_result disjunct_list
 
 (* Debug functions *)
 let print_formula_list_line f = print_string (rep_formula f ^ "," ^ "\n");;
 let print_formula_list l = print_string "["; List.iter (print_formula_list_line) l; print_string "]";;
 
+let print_step3_result res =
+  print_string "{\n";
+  print_string "  inf: "; print_formula_list (List.rev res.inf); print_string "\n";
+  print_string "  sup: "; print_formula_list (List.rev res.sup); print_string "\n";
+  print_string "  eq:  "; print_formula_list (List.rev res.eq); print_string "\n";
+  print_string "  independent:  "; print_formula_list (List.rev res.independent); print_string "\n";
+  print_string "}\n";;
+
+
+
 print_string "Example convert_disj_to_list: ";;
 print_formula (push_exists example_exist_outside_disj);;
 print_string "---> ";;
-print_formula_list (convert_disj_to_list (push_exists example_exist_outside_disj));;
+print_step3_result (convert_disj_to_list (push_exists example_exist_outside_disj));;

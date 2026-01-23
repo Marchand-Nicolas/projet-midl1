@@ -113,12 +113,6 @@ let dual f =
     | _ -> f
   in aux f;;
 
-  let rec univ_to_exist = function
-    | QuantifF(Forall, v, f') -> notf (exists v (notf (univ_to_exist f')))
-    | f -> f
-  ;;
-
-
 (* 
 signature : 
   is_prenex : formula -> bool
@@ -209,12 +203,6 @@ let rec neg_nf = function
   | NotF(BoolF(g, Disj, h)) -> BoolF(neg_nf (NotF g), Conj, neg_nf (NotF h)) (* Loi de De Morgan *)
   | BoolF(g, op, h) -> BoolF(neg_nf g, op, neg_nf h)
   | f -> f
-;;
-
-let example_neg_nf =
-  notf (exists "x" (
-    lt (var "x") (var "y")
-  ))
 ;;
 
 let example_neg_exist =
@@ -421,31 +409,6 @@ type step3_result = {
 
 let empty_step3_result = { inf = []; sup = []; eq = []; independent = [] }
 
-(* Sépare une conjonction en deux : (formule_avec_v, formule_sans_v) *)
-let rec split_conjunction_by_var target_var formula =
-  match formula with
-  | BoolF(left, Conj, right) ->
-      let (left_with_var, left_independent) = split_conjunction_by_var target_var left in
-      let (right_with_var, right_independent) = split_conjunction_by_var target_var right in
-      
-      (* Reconstruit une conjonction uniquement si les deux parties existent *)
-      let combine_parts opt_a opt_b = 
-        match opt_a, opt_b with
-        | None, None -> None
-        | Some a, None -> Some a
-        | None, Some b -> Some b
-        | Some a, Some b -> Some (conj a b)
-      in
-      (combine_parts left_with_var right_with_var, combine_parts left_independent right_independent)
-      
-  | atom ->
-      let depends_on_var = match atom with
-        | ComparF(Var x, _, _) -> x = target_var
-        | ComparF(_, _, Var x) -> x = target_var
-        | _ -> false
-      in
-      if depends_on_var then (Some atom, None) else (None, Some atom)
-
 (* Détermine la catégorie d'une contrainte sur x (x < b, a < x, ou x = c) *)
 let rec classify_x_constraint target_var formula =
   match formula with
@@ -456,66 +419,85 @@ let rec classify_x_constraint target_var formula =
   | BoolF(left, Conj, _) -> classify_x_constraint target_var left (* On descend pour trouver la variable *)
   | _ -> `Other
 
+(* Transforme une structure de conjonctions imbriquées en une liste plate *)
+let rec flatten_conjunctions = function
+  | BoolF(left, Conj, right) ->
+      (flatten_conjunctions left) @ (flatten_conjunctions right)
+  | formula -> [formula]
+
 (* Transforme une structure de disjonctions imbriquées en une liste plate *)
 let rec flatten_disjunctions = function
   | BoolF(left, Disj, right) ->
       (flatten_disjunctions left) @ (flatten_disjunctions right)
   | formula -> [formula]
 
-(* Cherche la première variable quantifiée par un "Existe" dans la liste *)
-let rec find_quantified_variable = function
-  | [] -> None
-  | QuantifF(Exists, var_name, _) :: _ -> Some var_name
-  | _ :: remaining -> find_quantified_variable remaining
-
-let convert_disj_to_list formula =
-  let disjunct_list = flatten_disjunctions formula in
-  let quantified_var_opt = find_quantified_variable disjunct_list in
+(*
+  convert_single_conj : string -> formula -> step3_result
   
-  match quantified_var_opt with
-  | None -> { empty_step3_result with independent = disjunct_list }
-  | Some target_var ->
-      List.fold_left (fun acc current_f ->
-        match current_f with
-        | QuantifF(Exists, x, body) when x = target_var ->
-            (* On sépare le corps de l'existentiel en (ce qui dépend de x, ce qui n'en dépend pas) *)
-            let (part_with_x, part_independent) = split_conjunction_by_var target_var body in
-            
-            (* On ajoute la partie indépendante de x à la catégorie 'independent' *)
-            let acc = match part_independent with
-              | Some independent_formula -> { acc with independent = independent_formula :: acc.independent }
-              | None -> acc
-            in
-            
-            (* On classe la partie qui dépend de x dans la bonne catégorie *)
-            (match part_with_x with
-             | None -> acc
-             | Some with_x_formula ->
-                match classify_x_constraint target_var with_x_formula with
-                | `Inf -> { acc with inf = (exists target_var with_x_formula) :: acc.inf }
-                | `Sup -> { acc with sup = (exists target_var with_x_formula) :: acc.sup }
-                | `Eq -> { acc with eq = (exists target_var with_x_formula) :: acc.eq }
-                | `Other -> { acc with independent = (exists target_var with_x_formula) :: acc.independent }
-            )
-        | other_formula -> 
-            { acc with independent = other_formula :: acc.independent }
-      ) empty_step3_result disjunct_list
+  Prend une variable cible et une conjonction de relations,
+  et regroupe les termes selon la procédure A.2.3 :
+  - inf : termes de la forme v < x (bornes inférieures)
+  - sup : termes de la forme x < u (bornes supérieures)  
+  - eq : termes de la forme w = x (égalités)
+  - independent : termes χ où x n'apparaît pas
+*)
+let convert_single_conj target_var body =
+  let conjunct_list = flatten_conjunctions body in
+  List.fold_left (fun acc current_atom ->
+    (* On vérifie si l'atome contient la variable cible *)
+    let contains_var = match current_atom with
+      | ComparF(Var x, _, _) -> x = target_var
+      | ComparF(_, _, Var x) -> x = target_var
+      | _ -> false
+    in
+    if not contains_var then
+      (* L'atome ne dépend pas de x, va dans 'independent' *)
+      { acc with independent = current_atom :: acc.independent }
+    else
+      (* L'atome dépend de x, on le classe selon sa forme *)
+      match classify_x_constraint target_var current_atom with
+      | `Inf -> { acc with inf = current_atom :: acc.inf }
+      | `Sup -> { acc with sup = current_atom :: acc.sup }
+      | `Eq -> { acc with eq = current_atom :: acc.eq }
+      | `Other -> { acc with independent = current_atom :: acc.independent }
+  ) empty_step3_result conjunct_list
+
+(*
+  convert_conj_to_list : formula -> step3_result list
+  
+  Prend une formule qui est une disjonction de ∃x. v_j (résultat de push_exists),
+  et retourne une liste de step3_result, un pour chaque disjonct.
+*)
+let convert_conj_to_list formula =
+  let disjuncts = flatten_disjunctions formula in
+  List.map (fun disjunct ->
+    match disjunct with
+    | QuantifF(Exists, target_var, body) -> convert_single_conj target_var body
+    | _ -> { empty_step3_result with independent = [disjunct] }
+  ) disjuncts
 
 (* Debug functions *)
 let print_formula_list_line f = print_string (rep_formula f ^ "," ^ "\n");;
 let print_formula_list l = print_string "["; List.iter (print_formula_list_line) l; print_string "]";;
 
 let print_step3_result res =
-  print_string "{\n";
-  print_string "  inf: "; print_formula_list (List.rev res.inf); print_string "\n";
-  print_string "  sup: "; print_formula_list (List.rev res.sup); print_string "\n";
-  print_string "  eq:  "; print_formula_list (List.rev res.eq); print_string "\n";
-  print_string "  independent:  "; print_formula_list (List.rev res.independent); print_string "\n";
-  print_string "}\n";;
+  print_string "  {\n";
+  print_string "    inf: "; print_formula_list (List.rev res.inf); print_string "\n";
+  print_string "    sup: "; print_formula_list (List.rev res.sup); print_string "\n";
+  print_string "    eq:  "; print_formula_list (List.rev res.eq); print_string "\n";
+  print_string "    independent:  "; print_formula_list (List.rev res.independent); print_string "\n";
+  print_string "  }";;
+
+let print_step3_result_list results =
+  print_string "[\n";
+  List.iter (fun res -> print_step3_result res; print_string ",\n") results;
+  print_string "]\n";;
 
 
 
-print_string "Example convert_disj_to_list: ";;
+(* Exemple : résultat de push_exists (disjonction de ∃x. v_j) *)
+print_string "Example convert_conj_to_list on push_exists result:\n";;
+print_string "Input: ";;
 print_formula (push_exists example_exist_outside_disj);;
-print_string "---> ";;
-print_step3_result (convert_disj_to_list (push_exists example_exist_outside_disj));;
+print_string "\nOutput: ";;
+print_step3_result_list (convert_conj_to_list (push_exists example_exist_outside_disj));;

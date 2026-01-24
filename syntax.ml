@@ -445,7 +445,9 @@ let convert_single_conj target_var body =
   let conjunct_list = flatten_conjunctions body in
   List.fold_left (fun acc current_atom ->
     (* On vérifie si l'atome contient la variable cible *)
+    (* Note: il faut gérer le cas où les deux côtés sont des variables *)
     let contains_var = match current_atom with
+      | ComparF(Var x, _, Var y) -> x = target_var || y = target_var
       | ComparF(Var x, _, _) -> x = target_var
       | ComparF(_, _, Var x) -> x = target_var
       | _ -> false
@@ -501,3 +503,176 @@ print_string "Input: ";;
 print_formula (push_exists example_exist_outside_disj);;
 print_string "\nOutput: ";;
 print_step3_result_list (convert_conj_to_list (push_exists example_exist_outside_disj));;
+
+(* Step 3.4, 3.5, 3.6 : Élimination de la variable quantifiée *)
+
+(* Helper: construit une conjonction à partir d'une liste de formules *)
+let list_to_conj = function
+  | [] -> top  (* Conjonction vide = vrai *)
+  | [f] -> f
+  | f :: rest -> List.fold_left conj f rest
+
+(* Helper: extrait le terme "de l'autre côté" d'une comparaison avec x *)
+let get_other_term target_var = function
+  | ComparF(Var x, _, other) when x = target_var -> other
+  | ComparF(other, _, Var x) when x = target_var -> other
+  | _ -> failwith "Formula doesn't contain target variable"
+
+(*
+  Step 3.4 : Si (w_k = x) est présent
+  
+  On choisit w_0 parmi les w_k, et on substitue
+*)
+let step3_4 target_var groups =
+  match groups.eq with
+  | [] -> None  (* Pas d'égalités, étape 3.4 ne s'applique pas *)
+  | first_eq :: _ ->
+    let w0 = get_other_term target_var first_eq in  (* Choix de w_0 *)
+    (* Construire w_0 < u_i pour toutes les bornes supérieures *)
+    let new_sup = List.map (fun f ->
+      let u = get_other_term target_var f in
+      lt w0 u
+    ) groups.sup in
+    (* Construire v_j < w_0 pour toutes les bornes inférieures *)
+    let new_inf = List.map (fun f ->
+      let v = get_other_term target_var f in
+      lt v w0
+    ) groups.inf in
+    (* Construire w_k = w_0 pour toutes les égalités *)
+    let new_eq = List.map (fun f ->
+      let w = get_other_term target_var f in
+      equal w w0
+    ) groups.eq in
+    (* Combiner tout *)
+    Some (list_to_conj (new_sup @ new_inf @ new_eq @ groups.independent))
+
+(*
+  Step 3.5 : Si (x < u_i) ET (v_j < x) sont présents (mais pas d'égalité)
+*)
+let step3_5 target_var groups =
+  if groups.eq <> [] then None  (* Étape 3.4 s'applique à la place *)
+  else if groups.sup = [] || groups.inf = [] then None  (* Étape 3.5 ne s'applique pas *)
+  else
+    (* Construire v_j < u_i pour toutes les paires (produit cartésien) *)
+    let pairs = List.flatten (List.map (fun inf_f ->
+      let v = get_other_term target_var inf_f in
+      List.map (fun sup_f ->
+        let u = get_other_term target_var sup_f in
+        lt v u
+      ) groups.sup
+    ) groups.inf) in
+    Some (list_to_conj (pairs @ groups.independent))
+
+(*
+  Step 3.6 : Si uniquement (x < u_i) OU uniquement (v_j < x) est présent
+*)
+let step3_6 groups =
+  if groups.eq <> [] then None  (* Étape 3.4 s'applique *)
+  else if groups.sup <> [] && groups.inf <> [] then None  (* Étape 3.5 s'applique *)
+  else
+    (* Seules des contraintes unilatérales ou aucune contrainte sur x *)
+    match groups.independent with
+    | [] -> Some top
+    | _ -> Some (list_to_conj groups.independent)
+
+(*
+  eliminate_exists_from_result : string -> step3_result -> formula
+  
+  Applique l'étape appropriée (3.4, 3.5, ou 3.6) pour éliminer x
+*)
+let eliminate_exists_from_result target_var groups =
+  match step3_4 target_var groups with
+  | Some f -> f
+  | None -> (
+    match step3_5 target_var groups with
+    | Some f -> f
+    | None -> (
+      match step3_6 groups with
+      | Some f -> f
+      | None -> failwith "No elimination rule applies"
+    )
+  )
+
+(*
+  eliminate_exists : formula -> formula
+  
+  Élimine un quantificateur existentiel d'une formule en forme normale disjonctive.
+*)
+let eliminate_exists formula =
+  let disjuncts = flatten_disjunctions formula in
+  let eliminated = List.map (fun disjunct ->
+    match disjunct with
+    | QuantifF(Exists, target_var, body) ->
+      let groups = convert_single_conj target_var body in
+      eliminate_exists_from_result target_var groups
+    | f -> f  (* Pas de quantificateur, on garde tel quel *)
+  ) disjuncts in
+  match eliminated with
+  | [] -> top
+  | [f] -> f
+  | f :: rest -> List.fold_left disj f rest
+
+(* === Tests === *)
+
+(* Test Step 3.4 : cas avec égalité *)
+let test_step3_4 =
+  exists "x" (
+    conj (equal (var "x") (var "w"))
+      (conj (lt (var "x") (var "u"))
+        (lt (var "v") (var "x")))
+  );;
+
+print_string "\n=== Test Step 3.4 (avec égalité) ===\n";;
+print_string "Input: ";;
+print_formula test_step3_4;;
+print_string "Output: ";;
+print_formula (eliminate_exists test_step3_4);;
+
+(* Test Step 3.5 : cas sans égalité mais avec bornes inf et sup *)
+let test_step3_5 =
+  exists "x" (
+    conj (lt (var "x") (var "u1"))
+      (conj (lt (var "x") (var "u2"))
+        (conj (lt (var "v1") (var "x"))
+          (lt (var "v2") (var "x"))))
+  );;
+
+print_string "\n=== Test Step 3.5 (bornes inf et sup) ===\n";;
+print_string "Input: ";;
+print_formula test_step3_5;;
+print_string "Output: ";;
+print_formula (eliminate_exists test_step3_5);;
+
+(* Test Step 3.6 : cas avec uniquement des bornes supérieures *)
+let test_step3_6_sup =
+  exists "x" (
+    conj (lt (var "x") (var "u1"))
+      (conj (lt (var "x") (var "u2"))
+        (lt (var "a") (var "b")))  (* condition indépendante *)
+  );;
+
+print_string "\n=== Test Step 3.6 (uniquement bornes sup) ===\n";;
+print_string "Input: ";;
+print_formula test_step3_6_sup;;
+print_string "Output: ";;
+print_formula (eliminate_exists test_step3_6_sup);;
+
+(* Test Step 3.6 : cas avec uniquement des bornes inférieures *)
+let test_step3_6_inf =
+  exists "x" (
+    conj (lt (var "v1") (var "x"))
+      (lt (var "v2") (var "x"))
+  );;
+
+print_string "\n=== Test Step 3.6 (uniquement bornes inf) ===\n";;
+print_string "Input: ";;
+print_formula test_step3_6_inf;;
+print_string "Output: ";;
+print_formula (eliminate_exists test_step3_6_inf);;
+
+(* Test complet sur l'exemple avec disjonction *)
+print_string "\n=== Test complet sur exemple push_exists ===\n";;
+print_string "Input (après push_exists): ";;
+print_formula (push_exists example_exist_outside_disj);;
+print_string "Output (après eliminate_exists): ";;
+print_formula (eliminate_exists (push_exists example_exist_outside_disj));;

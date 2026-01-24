@@ -113,12 +113,6 @@ let dual f =
     | _ -> f
   in aux f;;
 
-  let rec univ_to_exist = function
-    | QuantifF(Forall, v, f') -> notf (exists v (notf (univ_to_exist f')))
-    | f -> f
-  ;;
-
-
 (* 
 signature : 
   is_prenex : formula -> bool
@@ -209,12 +203,6 @@ let rec neg_nf = function
   | NotF(BoolF(g, Disj, h)) -> BoolF(neg_nf (NotF g), Conj, neg_nf (NotF h)) (* Loi de De Morgan *)
   | BoolF(g, op, h) -> BoolF(neg_nf g, op, neg_nf h)
   | f -> f
-;;
-
-let example_neg_nf =
-  notf (exists "x" (
-    lt (var "x") (var "y")
-  ))
 ;;
 
 let example_neg_exist =
@@ -377,7 +365,7 @@ print_string (sprintf "Example check_var (without x): %d" (check_var "x" (lt (va
 
 (* 
 signature : 
-  check_var : string -> formula -> int
+  check_conj : string -> formula -> int
 
 Cette fonction vérifie la présence de la variable v (supposément introduite dans un quantificateur) dans une conjonction
 Cette fonction renvoie:
@@ -408,3 +396,108 @@ let remove_var = function
   | f -> f
 ;;
 *)
+
+(* Steps 3.3+: non triviaux. On convertit la disjonction tableau, pour réaliser les étapes suivantes plus facilement *)
+
+(* Structure stockant les disjonctions classées par type de contrainte sur la variable quantifiée *)
+type step3_result = {
+  inf: formula list;  (* Cas a < x *)
+  sup: formula list;  (* Cas x < b *)
+  eq: formula list;    (* Cas x = c *)
+  independent: formula list;   (* Conditions ne dépendant pas de x *)
+}
+
+let empty_step3_result = { inf = []; sup = []; eq = []; independent = [] }
+
+(* Détermine la catégorie d'une contrainte sur x (x < b, a < x, ou x = c) *)
+let rec classify_x_constraint target_var formula =
+  match formula with
+  | ComparF(Var x, Lt, _) when x = target_var -> `Sup   (* x < b *)
+  | ComparF(_, Lt, Var x) when x = target_var -> `Inf   (* a < x *)
+  | ComparF(Var x, Equal, _) when x = target_var -> `Eq (* x = c *)
+  | ComparF(_, Equal, Var x) when x = target_var -> `Eq (* c = x *)
+  | BoolF(left, Conj, _) -> classify_x_constraint target_var left (* On descend pour trouver la variable *)
+  | _ -> `Other
+
+(* Transforme une structure de conjonctions imbriquées en une liste plate *)
+let rec flatten_conjunctions = function
+  | BoolF(left, Conj, right) ->
+      (flatten_conjunctions left) @ (flatten_conjunctions right)
+  | formula -> [formula]
+
+(* Transforme une structure de disjonctions imbriquées en une liste plate *)
+let rec flatten_disjunctions = function
+  | BoolF(left, Disj, right) ->
+      (flatten_disjunctions left) @ (flatten_disjunctions right)
+  | formula -> [formula]
+
+(*
+  convert_single_conj : string -> formula -> step3_result
+  
+  Prend une variable cible et une conjonction de relations,
+  et regroupe les termes selon la procédure A.2.3 :
+  - inf : termes de la forme v < x (bornes inférieures)
+  - sup : termes de la forme x < u (bornes supérieures)  
+  - eq : termes de la forme w = x (égalités)
+  - independent : termes χ où x n'apparaît pas
+*)
+let convert_single_conj target_var body =
+  let conjunct_list = flatten_conjunctions body in
+  List.fold_left (fun acc current_atom ->
+    (* On vérifie si l'atome contient la variable cible *)
+    let contains_var = match current_atom with
+      | ComparF(Var x, _, _) -> x = target_var
+      | ComparF(_, _, Var x) -> x = target_var
+      | _ -> false
+    in
+    if not contains_var then
+      (* L'atome ne dépend pas de x, va dans 'independent' *)
+      { acc with independent = current_atom :: acc.independent }
+    else
+      (* L'atome dépend de x, on le classe selon sa forme *)
+      match classify_x_constraint target_var current_atom with
+      | `Inf -> { acc with inf = current_atom :: acc.inf }
+      | `Sup -> { acc with sup = current_atom :: acc.sup }
+      | `Eq -> { acc with eq = current_atom :: acc.eq }
+      | `Other -> { acc with independent = current_atom :: acc.independent }
+  ) empty_step3_result conjunct_list
+
+(*
+  convert_conj_to_list : formula -> step3_result list
+  
+  Prend une formule qui est une disjonction de ∃x. v_j (résultat de push_exists),
+  et retourne une liste de step3_result, un pour chaque disjonct.
+*)
+let convert_conj_to_list formula =
+  let disjuncts = flatten_disjunctions formula in
+  List.map (fun disjunct ->
+    match disjunct with
+    | QuantifF(Exists, target_var, body) -> convert_single_conj target_var body
+    | _ -> { empty_step3_result with independent = [disjunct] }
+  ) disjuncts
+
+(* Debug functions *)
+let print_formula_list_line f = print_string (rep_formula f ^ "," ^ "\n");;
+let print_formula_list l = print_string "["; List.iter (print_formula_list_line) l; print_string "]";;
+
+let print_step3_result res =
+  print_string "  {\n";
+  print_string "    inf: "; print_formula_list (List.rev res.inf); print_string "\n";
+  print_string "    sup: "; print_formula_list (List.rev res.sup); print_string "\n";
+  print_string "    eq:  "; print_formula_list (List.rev res.eq); print_string "\n";
+  print_string "    independent:  "; print_formula_list (List.rev res.independent); print_string "\n";
+  print_string "  }";;
+
+let print_step3_result_list results =
+  print_string "[\n";
+  List.iter (fun res -> print_step3_result res; print_string ",\n") results;
+  print_string "]\n";;
+
+
+
+(* Exemple : résultat de push_exists (disjonction de ∃x. v_j) *)
+print_string "Example convert_conj_to_list on push_exists result:\n";;
+print_string "Input: ";;
+print_formula (push_exists example_exist_outside_disj);;
+print_string "\nOutput: ";;
+print_step3_result_list (convert_conj_to_list (push_exists example_exist_outside_disj));;

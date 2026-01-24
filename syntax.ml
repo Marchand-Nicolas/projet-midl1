@@ -386,17 +386,6 @@ print_string (sprintf "Example check_conj (x < x): %d" (check_conj "x" (conj (lt
 print_string (sprintf "Example check_conj (x present): %d" (check_conj "x" (conj (equal (var "x") (var "x")) (lt (var "x") (var "y")))) ^ "\n");;
 print_string (sprintf "Example check_conj (x absent): %d" (check_conj "x" (conj (equal (var "y") (var "y")) (lt (var "z") (var "y")))) ^ "\n");;
 
-(*
-remove_var traite les cas 1 et 2 et sinon lance le traitement des autres cas
-
-let remove_var = function
-  | QuantifF(Exists, v, f) -> let result = check_conj v f in if result = 2 then bottom
-      else if result = 0 then f
-      else treat_regrouped (regroup QuantifF(Exists, v, f))
-  | f -> f
-;;
-*)
-
 (* Steps 3.3+: non triviaux. On convertit la disjonction tableau, pour réaliser les étapes suivantes plus facilement *)
 
 (* Structure stockant les disjonctions classées par type de contrainte sur la variable quantifiée *)
@@ -501,3 +490,45 @@ print_string "Input: ";;
 print_formula (push_exists example_exist_outside_disj);;
 print_string "\nOutput: ";;
 print_step3_result_list (convert_conj_to_list (push_exists example_exist_outside_disj));;
+print_string "\n";;
+
+
+
+(*
+  make_conj_from_list : formula list -> formula
+
+  Rassemble les formules d'une liste dans une conjonction, renvoie bottom pour une liste vide
+*)
+let rec make_conj_from_list = function
+  | [] -> bottom
+  | [a] -> a
+  | a :: l' -> BoolF(a, Conj, (make_conj_from_list l'))
+;;
+
+print_string "Example make_conj_from_list (empty): ";;
+print_formula (make_conj_from_list []);;
+print_string "Example make_conj_from_list (one element): ";;
+print_formula (make_conj_from_list [ComparF(var "x", Equal, var "y")]);;
+print_string "Example make_conj_from_list (multiple): ";;
+print_formula (make_conj_from_list [ComparF(var "x", Equal, var "y"); ComparF(var "x", Lt, var "z"); ComparF(var "y", Lt, var "z")]);;
+
+
+
+(*
+let treat_regrouped comp_lists =
+  if comp_lists.res != [] then replace_var comp_lists
+  else if comp_lists.inf != [] && comp_lists.sup != [] then fuse_comp comp_lists
+  else make_conj_from_list comp_lists.independent
+;;
+*)
+
+(*
+remove_var traite les cas 1 et 2 et sinon lance le traitement des autres cas
+
+let remove_var = function
+  | QuantifF(Exists, v, f) -> let result = check_conj v f in if result = 2 then bottom
+      else if result = 0 then f
+      else treat_regrouped (convert_single_conj QuantifF(Exists, v, f))
+  | f -> f
+;;
+*)

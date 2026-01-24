@@ -375,27 +375,18 @@ Cette fonction renvoie:
 *)
 
 let rec check_conj v = function
-  | BoolF(f, Conj, g) -> let fres = check_var v f in
-    let gres = check_var v g in
-      if (fres = 2 || gres = 2) then 2 else
-        if (fres = 1 || gres = 1) then 1 else 0
-  | f -> failwith "formula must be conjunction"
+  | BoolF(f, Conj, g) -> 
+    let fres = check_conj v f in
+    let gres = check_conj v g in
+    if (fres = 2 || gres = 2) then 2
+    else if (fres = 1 || gres = 1) then 1 
+    else 0
+  | f -> check_var v f  (* Cas de base : vérifier l'atome *)
 ;;
 
 print_string (sprintf "Example check_conj (x < x): %d" (check_conj "x" (conj (lt (var "x") (var "x")) (lt (var "x") (var "y")))) ^ "\n");;
 print_string (sprintf "Example check_conj (x present): %d" (check_conj "x" (conj (equal (var "x") (var "x")) (lt (var "x") (var "y")))) ^ "\n");;
 print_string (sprintf "Example check_conj (x absent): %d" (check_conj "x" (conj (equal (var "y") (var "y")) (lt (var "z") (var "y")))) ^ "\n");;
-
-(*
-remove_var traite les cas 1 et 2 et sinon lance le traitement des autres cas
-
-let remove_var = function
-  | QuantifF(Exists, v, f) -> let result = check_conj v f in if result = 2 then bottom
-      else if result = 0 then f
-      else treat_regrouped (regroup QuantifF(Exists, v, f))
-  | f -> f
-;;
-*)
 
 (* Steps 3.3+: non triviaux. On convertit la disjonction tableau, pour réaliser les étapes suivantes plus facilement *)
 
@@ -507,10 +498,19 @@ print_step3_result_list (convert_conj_to_list (push_exists example_exist_outside
 (* Step 3.4, 3.5, 3.6 : Élimination de la variable quantifiée *)
 
 (* Helper: construit une conjonction à partir d'une liste de formules *)
-let list_to_conj = function
-  | [] -> top  (* Conjonction vide = vrai *)
-  | [f] -> f
-  | f :: rest -> List.fold_left conj f rest
+let rec make_conj_from_list = function
+  | [] -> top
+  | [a] -> a
+  | a :: l' -> BoolF(a, Conj, (make_conj_from_list l'))
+;;
+
+(* Tests make_conj_from_list *)
+print_string "Example make_conj_from_list (empty): ";;
+print_formula (make_conj_from_list []);;
+print_string "Example make_conj_from_list (one element): ";;
+print_formula (make_conj_from_list [ComparF(var "x", Equal, var "y")]);;
+print_string "Example make_conj_from_list (multiple): ";;
+print_formula (make_conj_from_list [ComparF(var "x", Equal, var "y"); ComparF(var "x", Lt, var "z"); ComparF(var "y", Lt, var "z")]);;
 
 (* Helper: extrait le terme "de l'autre côté" d'une comparaison avec x *)
 let get_other_term target_var = function
@@ -544,7 +544,7 @@ let step3_4 target_var groups =
       equal w w0
     ) groups.eq in
     (* Combiner tout *)
-    Some (list_to_conj (new_sup @ new_inf @ new_eq @ groups.independent))
+    Some (make_conj_from_list (new_sup @ new_inf @ new_eq @ groups.independent))
 
 (*
   Step 3.5 : Si (x < u_i) ET (v_j < x) sont présents (mais pas d'égalité)
@@ -561,7 +561,7 @@ let step3_5 target_var groups =
         lt v u
       ) groups.sup
     ) groups.inf) in
-    Some (list_to_conj (pairs @ groups.independent))
+    Some (make_conj_from_list (pairs @ groups.independent))
 
 (*
   Step 3.6 : Si uniquement (x < u_i) OU uniquement (v_j < x) est présent
@@ -573,7 +573,7 @@ let step3_6 groups =
     (* Seules des contraintes unilatérales ou aucune contrainte sur x *)
     match groups.independent with
     | [] -> Some top
-    | _ -> Some (list_to_conj groups.independent)
+    | _ -> Some (make_conj_from_list groups.independent)
 
 (*
   eliminate_exists_from_result : string -> step3_result -> formula
@@ -597,14 +597,19 @@ let eliminate_exists_from_result target_var groups =
   eliminate_exists : formula -> formula
   
   Élimine un quantificateur existentiel d'une formule en forme normale disjonctive.
+  Applique les étapes 1 à 6 de l'algorithme de suppression de variable.
 *)
 let eliminate_exists formula =
   let disjuncts = flatten_disjunctions formula in
   let eliminated = List.map (fun disjunct ->
     match disjunct with
     | QuantifF(Exists, target_var, body) ->
-      let groups = convert_single_conj target_var body in
-      eliminate_exists_from_result target_var groups
+      let result = check_conj target_var body in
+      if result = 2 then bottom           (* Étape 2: x < x présent *)
+      else if result = 0 then body        (* Étape 1: x absent de fv *)
+      else
+        let groups = convert_single_conj target_var body in  (* Étape 3 *)
+        eliminate_exists_from_result target_var groups       (* Étapes 4, 5, 6 *)
     | f -> f  (* Pas de quantificateur, on garde tel quel *)
   ) disjuncts in
   match eliminated with

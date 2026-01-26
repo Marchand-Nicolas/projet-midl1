@@ -782,7 +782,7 @@ let final_test f name =
   printf "Nom de la formule : \"%s\"\n" name;
   print_string "Input initial : ";
   print_formula f;
-  print_string "Input final : ";
+  print_string "Output final : ";
   print_formula (solve f)
 ;;
 

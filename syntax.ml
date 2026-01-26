@@ -613,7 +613,7 @@ let eliminate_exists formula =
     | f -> f  (* Pas de quantificateur, on garde tel quel *)
   ) disjuncts in
   match eliminated with
-  | [] -> top
+  | [] -> bottom
   | [f] -> f
   | f :: rest -> List.fold_left disj f rest
 

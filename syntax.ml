@@ -355,7 +355,7 @@ let check_var v = function
       if (x = y) then 2 else 1
       else 0
   | ComparF(x, Equal, y) -> if (x = var v || y = var v) then 1 else 0
-  | f -> failwith "formula must be ComparF"
+  | f -> 0
 ;;
 
 print_string (sprintf "Example check_var (x < x): %d" (check_var "x" (lt (var "x") (var "x"))) ^ "\n");;
@@ -384,9 +384,9 @@ let rec check_conj v = function
   | f -> check_var v f  (* Cas de base : vérifier l'atome *)
 ;;
 
-print_string (sprintf "Example check_conj (x < x): %d" (check_conj "x" (conj (lt (var "x") (var "x")) (lt (var "x") (var "y")))) ^ "\n");;
-print_string (sprintf "Example check_conj (x present): %d" (check_conj "x" (conj (equal (var "x") (var "x")) (lt (var "x") (var "y")))) ^ "\n");;
-print_string (sprintf "Example check_conj (x absent): %d" (check_conj "x" (conj (equal (var "y") (var "y")) (lt (var "z") (var "y")))) ^ "\n");;
+print_string (sprintf "Exemple check_conj (x < x) : %d" (check_conj "x" (conj (lt (var "x") (var "x")) (lt (var "x") (var "y")))) ^ "\n");;
+print_string (sprintf "Exemple check_conj (x present) : %d" (check_conj "x" (conj (equal (var "x") (var "x")) (lt (var "x") (var "y")))) ^ "\n");;
+print_string (sprintf "Exemple check_conj (x absent) : %d" (check_conj "x" (conj (equal (var "y") (var "y")) (lt (var "z") (var "y")))) ^ "\n");;
 
 (* Steps 3.3+: non triviaux. On convertit la disjonction tableau, pour réaliser les étapes suivantes plus facilement *)
 
@@ -489,10 +489,10 @@ let print_step3_result_list results =
 
 
 (* Exemple : résultat de push_exists (disjonction de ∃x. v_j) *)
-print_string "Example convert_conj_to_list on push_exists result:\n";;
-print_string "Input: ";;
+print_string "Exemple convert_conj_to_list sur push_exists result :\n";;
+print_string "Input : ";;
 print_formula (push_exists example_exist_outside_disj);;
-print_string "\nOutput: ";;
+print_string "\nOutput : ";;
 print_step3_result_list (convert_conj_to_list (push_exists example_exist_outside_disj));;
 
 (* Step 3.4, 3.5, 3.6 : Élimination de la variable quantifiée *)
@@ -592,7 +592,7 @@ let eliminate_exists_from_result target_var groups =
       | None -> failwith "No elimination rule applies"
     )
   )
-
+  
 (*
   eliminate_exists : formula -> formula
   
@@ -617,6 +617,102 @@ let eliminate_exists formula =
   | [f] -> f
   | f :: rest -> List.fold_left disj f rest
 
+(*
+debug : formula -> formula
+
+Affiche f avant de la renvoyer, non-changée.
+*)
+let debug f =
+  print_string "[DEBUG] ";
+  print_formula f;
+  f
+;;
+
+(*
+preprocess : formula -> formula
+
+Effectue le prétraitement sur f 
+*)
+let preprocess f =
+  f 
+  |> neg_nf
+  |> neg_elim
+  |> disj_nf
+  |> push_exists
+;;
+
+(*
+  preprocess_debug : formula -> formula
+
+  Effectue le même processus que preprocess en appelant debug à chaque étape.
+*)
+let preprocess_debug f =
+  f
+  |> neg_nf
+  |> debug
+  |> neg_elim
+  |> debug
+  |> disj_nf
+  |> debug
+  |> push_exists
+  |> debug
+(*
+formula -> formula
+
+Renvoie la formule simplifiée au maximum 
+par les règles de base sur les opérations booléennes
+*)
+let rec simplify f = match f with
+  | BoolF(g, op, h) -> 
+      let gs = simplify g in
+      let hs = simplify h in
+      begin 
+        match (gs, op, hs) with
+        (* Forme "A ∧ B" *)
+        | (Const Top, Conj, x) -> x
+        | (x, Conj, Const Top) -> x
+        | (Const Bottom, Conj, _) -> bottom
+        | (_, Conj, Const Bottom) -> bottom
+        (* Forme "A V B" *)
+        | (Const Bottom, Disj, x) | (x, Disj, Const Bottom) -> x
+        | (Const Top, Disj, _) -> top
+        | (_, Disj, Const Top) -> top
+        | _ -> BoolF(gs, op, hs)
+      end
+  | NotF(Const Top) -> bottom
+  | NotF(Const Bottom) -> top
+  | NotF(f) -> NotF(simplify f)
+  | _ -> f;;
+
+(* 
+eliminate_quantifiers : formula -> formula
+
+Renvoie la formule finale, sans simplifications
+*)
+let rec eliminate_quantifiers f = match f with
+  | QuantifF(Forall, v, g) ->
+    eliminate_quantifiers (notf (exists v (notf g)))
+  
+  | QuantifF(Exists, v, g) ->
+    (* Approche bottom-up : on nettoie de l'intérieur *)
+    let clean_g = eliminate_quantifiers g in
+    let to_process = exists v clean_g in
+    let prepared = preprocess to_process in    
+    simplify (eliminate_exists prepared)
+  | BoolF(g,op, h) -> BoolF(eliminate_quantifiers g, op, eliminate_quantifiers h)
+  | NotF(g) -> NotF(eliminate_quantifiers g)
+  | _ -> f;;
+
+(* 
+solve : formula -> formula
+
+Processus final d'élimination de quantificateurs
+*)
+let solve f =
+  f
+  |> eliminate_quantifiers
+  |> simplify
+
 (* === Tests === *)
 
 (* Test Step 3.4 : cas avec égalité *)
@@ -628,9 +724,9 @@ let test_step3_4 =
   );;
 
 print_string "\n=== Test Step 3.4 (avec égalité) ===\n";;
-print_string "Input: ";;
+print_string "Input : ";;
 print_formula test_step3_4;;
-print_string "Output: ";;
+print_string "Output : ";;
 print_formula (eliminate_exists test_step3_4);;
 
 (* Test Step 3.5 : cas sans égalité mais avec bornes inf et sup *)
@@ -643,9 +739,9 @@ let test_step3_5 =
   );;
 
 print_string "\n=== Test Step 3.5 (bornes inf et sup) ===\n";;
-print_string "Input: ";;
+print_string "Input : ";;
 print_formula test_step3_5;;
-print_string "Output: ";;
+print_string "Output : ";;
 print_formula (eliminate_exists test_step3_5);;
 
 (* Test Step 3.6 : cas avec uniquement des bornes supérieures *)
@@ -657,9 +753,9 @@ let test_step3_6_sup =
   );;
 
 print_string "\n=== Test Step 3.6 (uniquement bornes sup) ===\n";;
-print_string "Input: ";;
+print_string "Input : ";;
 print_formula test_step3_6_sup;;
-print_string "Output: ";;
+print_string "Output : ";;
 print_formula (eliminate_exists test_step3_6_sup);;
 
 (* Test Step 3.6 : cas avec uniquement des bornes inférieures *)
@@ -670,14 +766,25 @@ let test_step3_6_inf =
   );;
 
 print_string "\n=== Test Step 3.6 (uniquement bornes inf) ===\n";;
-print_string "Input: ";;
+print_string "Input : ";;
 print_formula test_step3_6_inf;;
-print_string "Output: ";;
+print_string "Output : ";;
 print_formula (eliminate_exists test_step3_6_inf);;
 
 (* Test complet sur l'exemple avec disjonction *)
 print_string "\n=== Test complet sur exemple push_exists ===\n";;
-print_string "Input (après push_exists): ";;
+print_string "Input (après push_exists) : ";;
 print_formula (push_exists example_exist_outside_disj);;
 print_string "Output (après eliminate_exists): ";;
 print_formula (eliminate_exists (push_exists example_exist_outside_disj));;
+
+let final_test f name =
+  printf "Nom de la formule : \"%s\"\n" name;
+  print_string "Input initial : ";
+  print_formula f;
+  print_string "Input final : ";
+  print_formula (solve f)
+;;
+
+print_string "\n=== TEST FINAL : Exemple de Prise de décision ===\n";;
+final_test example_1 "Exemple 1"

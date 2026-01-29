@@ -120,7 +120,7 @@
   )[
     #align(center)[
       #text(size: 16pt, weight: "bold", fill: rgb(30, 70, 120))[
-        Assignment Overview
+        Aperçu du Projet
       ]
     ]
     #v(0.8em)
@@ -130,7 +130,7 @@
       row-gutter: 1em,
       // Left column
       [
-        *Document Contents:*
+        *Contenu :*
         #outline(
           title: none,
           indent: 1em,
@@ -141,7 +141,7 @@
       [
         *Assignment Details:*
         #if "course" in details [
-          - *Course:* #details.course
+          - *UE :* #details.course
         ]
         #if "supervisor" in details [
           - *Supervisor:* #details.supervisor
@@ -153,25 +153,25 @@
           - *Professor:* #details.professor
         ]
         #if "due-date" in details [
-          - *Due Date:* #details.due-date
+          - *Date de rendu :* #details.due-date
         ]
         #if "hardware" in details [
-          - *Hardware:* #details.hardware
+          - *Hardware :* #details.hardware
         ]
         #if "software" in details [
-          - *Software:* #details.software
+          - *Langage :* #details.software
         ]
         #if "duration" in details [
-          - *Duration:* #details.duration
+          - *Duration :* #details.duration
         ]
         #if "lab-number" in details [
-          - *Lab Number:* #details.lab-number
+          - *Lab Number :* #details.lab-number
         ]
         #if "partner" in details [
-          - *Lab Partner:* #details.partner
+          - *Lab Partner :* #details.partner
         ]
         #if "section" in details [
-          - *Section:* #details.section
+          - *Section :* #details.section
         ]
       ],
     )

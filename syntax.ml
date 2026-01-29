@@ -24,7 +24,10 @@ module SyntaxTree = struct
 
   type term = 
     | Var of string
-    | Val of float
+    | Val of int
+    | Add of term * term
+    | Sub of term * term
+    | Mult of int * term
 
   type formula =
     | Const of bool_const
@@ -76,9 +79,12 @@ end;;
 open Printf
 open SyntaxTree
 
-let rep_term = function
+let rec rep_term = function
   | Var x -> x
-  | Val x -> string_of_float x
+  | Val x -> string_of_int x
+  | Add(x,y) -> rep_term x ^ " + " ^ rep_term y
+  | Sub(x,y) -> rep_term x ^ " - (" ^ rep_term y ^ ")"
+  | Mult(a,x) -> string_of_int a ^ "(" ^ rep_term x ^ ")"
 
 let rec rep_formula = function
   | Const c -> rep_const c
@@ -788,3 +794,38 @@ let final_test f name =
 
 print_string "\n=== TEST FINAL : Exemple de Prise de décision ===\n";;
 final_test example_1 "Exemple 1"
+
+let rec simplify_term t = match t with
+  | Val v -> Val v
+  | Var x -> Var x
+  | Add(t1, t2) -> 
+    let s1 = simplify_term t1 in
+    let s2 = simplify_term t2 in
+    begin match (s1, s2) with
+    | (Val a, Val b) -> Val (a + b) 
+    | (Val 0, t) -> t
+    | (t, Val 0) -> t
+    (* Associativité *)
+    | (Add(sub_t, Val a), Val b) -> Add(sub_t, Val (a + b))
+    | (Val a, Add(Val b, sub_t)) -> Add(Val (a + b), sub_t)
+    | _ -> Add(s1, s2)
+    end
+  | Sub(t1, t2) ->
+    let s1 = simplify_term t1 in
+    let s2 = simplify_term t2 in
+    begin match (s1, s2) with
+    | (Val a, Val b) -> Val (a - b)
+    | (t, Val 0) -> t
+    | (Val 0, t) -> Mult(-1, t)
+    | (t1, t2) when t1 = t2 -> Val 0
+    | _ -> Sub(s1, s2)
+    end
+  | Mult(k, t) ->
+    let s = simplify_term t in
+    match s with
+    | Val v -> Val (k * v)
+    | Mult(k2, sub_t) -> Mult(k * k2, sub_t)
+    | _ -> if k = 0 then Val 0
+      else if k = 1 then s
+      else Mult(k, s)
+;;

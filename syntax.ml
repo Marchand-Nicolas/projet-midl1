@@ -354,23 +354,33 @@ print_formula (push_exists example_exist_outside_disj);;
 
 (* Step 3: Remove variable *)
 
+(*
+signature :
+  get_vars_in_term : term -> string list
+
+  Renvoie la liste des variables dans l'(in)équation
+*)
+let rec get_vars_in_term t = match t with
+  | Var x -> [x]
+  | Val _ -> []
+  | Add(t1, t2) | Sub(t1, t2) -> (get_vars_in_term t1) @ (get_vars_in_term t2)
+  | Mult(_, t1) -> get_vars_in_term t1
+;;
+
 (* 
 signature : 
   check_var : string -> formula -> int
 
 Cette fonction vérifie la présence de la variable v (supposément introduite dans un quantificateur) dans une comparaison
 Cette fonction renvoie:
-  2 si la comparaison est v < v
-  1 si v est présent d'une autre manière dans la comparaison
+  1 si v est présent
   0 sinon (v absent)
 *)
-
-let check_var v = function
-  | ComparF(x, Lt, y) -> if (x = var v || y = var v) then
-      if (x = y) then 2 else 1
-      else 0
-  | ComparF(x, Equal, y) -> if (x = var v || y = var v) then 1 else 0
-  | f -> 0
+let check_var v formula = match formula with
+  | ComparF(lhs, _, rhs) -> 
+      let vars = (get_vars_in_term lhs) @ (get_vars_in_term rhs) in
+      if List.mem v vars then 1 else 0
+  | _ -> 0
 ;;
 
 print_string (sprintf "Example check_var (x < x): %d" (check_var "x" (lt (var "x") (var "x"))) ^ "\n");;
@@ -391,12 +401,10 @@ Cette fonction renvoie:
 
 let rec check_conj v = function
   | BoolF(f, Conj, g) -> 
-    let fres = check_conj v f in
-    let gres = check_conj v g in
-    if (fres = 2 || gres = 2) then 2
-    else if (fres = 1 || gres = 1) then 1 
-    else 0
-  | f -> check_var v f  (* Cas de base : vérifier l'atome *)
+      let fres = check_conj v f in
+      let gres = check_conj v g in
+      if (fres = 1 || gres = 1) then 1 else 0
+  | f -> check_var v f
 ;;
 
 print_string (sprintf "Exemple check_conj (x < x) : %d" (check_conj "x" (conj (lt (var "x") (var "x")) (lt (var "x") (var "y")))) ^ "\n");;
@@ -723,17 +731,19 @@ let eliminate_exists formula =
     match disjunct with
     | QuantifF(Exists, target_var, body) ->
       let result = check_conj target_var body in
-      if result = 2 then bottom           (* Étape 2: x < x présent *)
-      else if result = 0 then body        (* Étape 1: x absent de fv *)
+      if result = 0 then body (* Étape 1: x absent de fv *)
       else
-        let groups = convert_single_conj target_var body in  (* Étape 3 *)
-        eliminate_exists_from_result target_var groups       (* Étapes 4, 5, 6 *)
-    | f -> f  (* Pas de quantificateur, on garde tel quel *)
+        let groups = convert_single_conj target_var body in (* Étape 3 *)
+        eliminate_exists_from_result target_var groups (* Étapes 4, 5, 6 *)
+
+    | f -> f
   ) disjuncts in
+  
   match eliminated with
   | [] -> bottom
   | [f] -> f
   | f :: rest -> List.fold_left disj f rest
+;;
 
 (*
 debug : formula -> formula
@@ -781,6 +791,15 @@ Renvoie la formule simplifiée au maximum
 par les règles de base sur les opérations booléennes
 *)
 let rec simplify f = match f with
+  | ComparF(Val v1, Lt, Val v2) ->
+    if v1 < v2 then top else bottom
+  | ComparF(Val v1, Equal, Val v2) ->
+    if v1 = v2 then top else bottom
+  | ComparF(t1, op, t2) ->
+      let s1 = simplify_term t1 in
+      let s2 = simplify_term t2 in
+      if s1 <> t1 || s2 <> t2 then simplify (ComparF(s1, op, s2)) (* On relance si qlqc a changé *)
+      else f
   | BoolF(g, op, h) -> 
       let gs = simplify g in
       let hs = simplify h in
@@ -909,11 +928,27 @@ final_test example_1 "Exemple 1";;
 
 print_string "\n=== LOT 2 ===\n";;
 
-let test_lra_1 = 
+let test_arith_1 = (*∃x ∈ ℤ, 2x < 10 V 3 < x*)
   exists "x" (
     conj 
-      (lt (mul 2 (var "x")) (val_ 10))  (* 2x < 10 *)
-      (lt (val_ 3) (var "x"))             (* 3 < x *)
+      (lt (mul 2 (var "x")) (val_ 10))
+      (lt (val_ 3) (var "x"))           
   );;
 
-final_test test_lra_1 "TEST LRA 1"
+final_test test_arith_1 "TEST Arithmétique 1";;
+
+let test_arith_2 = (* ∃ x ∈ ℤ, -2x < -10 V x < 8 *)
+  exists "x" (
+    conj 
+      (lt (mul (-2) (var "x")) (val_ (-10)))
+      (lt (var "x") (val_ 8))
+  );;
+
+final_test test_arith_2 "TEST Arithmétique 2";;
+
+let test_arith_3 = 
+  exists "x" (
+    lt (add (var "x") (val_ 5)) (add (var "x") (val_ 2))
+  );;
+
+final_test test_arith_3 "TEST Arithmétique 3";;

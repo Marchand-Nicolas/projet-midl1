@@ -22,12 +22,17 @@ module SyntaxTree = struct
     | Forall
   ;;
 
+  (*
+  bien que l'on travaille sur des entiers, 
+  il est plus simple de mettre des flottants 
+  pour diviser lors de l'isolation de variables
+  *)
   type term = 
     | Var of string
-    | Val of int
+    | Val of float
     | Add of term * term
     | Sub of term * term
-    | Mult of int * term
+    | Mult of float * term
 
   type formula =
     | Const of bool_const
@@ -70,9 +75,13 @@ let notf f = NotF(f);;
 let conj f g = BoolF(f,Conj,g);;
 let disj f g = BoolF(f,Disj,g);;
 let implies f g = BoolF(notf f,Disj, g);;
-let var x = Var(x);;
+let var x = Var x;;
 
-let _val x = Val(x);;
+let val_ k = Val (float_of_int k);;
+
+let add t1 t2 = Add(t1, t2);;
+let sub t1 t2 = Sub(t1, t2);;
+let mul k t = Mult(float_of_int k, t);;
 
 end;;
 
@@ -81,10 +90,10 @@ open SyntaxTree
 
 let rec rep_term = function
   | Var x -> x
-  | Val x -> string_of_int x
+  | Val x -> string_of_float x
   | Add(x,y) -> rep_term x ^ " + " ^ rep_term y
   | Sub(x,y) -> rep_term x ^ " - (" ^ rep_term y ^ ")"
-  | Mult(a,x) -> string_of_int a ^ "(" ^ rep_term x ^ ")"
+  | Mult(a,x) -> string_of_float a ^ "(" ^ rep_term x ^ ")"
 
 let rec rep_formula = function
   | Const c -> rep_const c
@@ -428,6 +437,116 @@ let rec flatten_disjunctions = function
       (flatten_disjunctions left) @ (flatten_disjunctions right)
   | formula -> [formula]
 
+(* === DEBUT FONCTIONS LOT 2 === *)
+
+(*
+simplify_term : term -> term
+
+simplifie algèbriquement l'équation afin qu'elle soit le plus simple possible
+*)
+let rec simplify_term t = 
+  match t with
+  | Val v -> Val v
+  | Var x -> Var x
+
+  | Add(t1, t2) -> 
+    (* bottom-up *)
+    let s1 = simplify_term t1 in
+    let s2 = simplify_term t2 in
+    
+    begin match (s1, s2) with
+    | (Val a, Val b) -> Val (a +. b) 
+    (* 0 +. x = x*)
+    | (Val 0., t) -> t
+    | (t, Val 0.) -> t
+    (* Associativité *)
+    | (Add(sub_t, Val a), Val b) -> Add(sub_t, Val (a +. b))
+    | (Val a, Add(Val b, sub_t)) -> Add(Val (a +. b), sub_t)
+    | _ -> Add(s1, s2)
+    end
+
+  | Sub(t1, t2) ->
+    let s1 = simplify_term t1 in
+    let s2 = simplify_term t2 in
+    begin match (s1, s2) with
+    | (Val a, Val b) -> Val (a -. b)
+    | (t, Val 0.) -> t (* x - 0 = x *)
+    | (Val 0., t) -> Mult(-1., t) (* 0 - x = -1 * x *)
+    | (t1, t2) when t1 = t2 -> Val 0. (* x - x = 0 *)
+    | _ -> Sub(s1, s2)
+    end
+
+  | Mult(k, t) ->
+    let s = simplify_term t in
+    match s with
+    | Val v -> Val (k *. v)
+    | Mult(k2, sub_t) -> Mult(k *. k2, sub_t)
+    | _ -> if k = 0. then Val 0.  (* 0 * x = 0 *)
+      else if k = 1. then s  (* 1 * x = x *)
+      else Mult(k, s)
+;; 
+
+(*
+get_coeff : string -> term -> (int * term)
+
+Peut s'apparenter à une division euclidienne de t par v :
+On renvoie le couple (coefficient,reste) de la "division euclidienne" de t par v.
+En le voyant comme un polynôme de degré 1 à n+1 inconnues, on pourrait le voir comme :
+P(v,x1,...,xn) = Q(v) + R(x1,...,xn)
+*)
+let rec get_coeff v t = match t with
+  (* bottom-up *)
+
+  (* pour notre variable cible, on renvoie (1,0) car v = 1v +. 0*)
+  | Var x when x = v -> (1., Val 0.)
+  (* pour une autre variable ou une constante, on a A = 0 v +. t *)
+  | Var _ | Val _ -> (0., t)
+
+  (* on somme les coefficients entre eux, de même pour les restes *)
+  | Add(t1, t2) ->
+      let (c1, r1) = get_coeff v t1 in
+      let (c2, r2) = get_coeff v t2 in
+      (c1 +. c2, Add(r1, r2))
+
+  | Sub(t1, t2) ->
+      let (c1, r1) = get_coeff v t1 in
+      let (c2, r2) = get_coeff v t2 in
+      (c1 -. c2, Sub(r1, r2))
+
+  | Mult(k, t1) ->
+      let (c, r) = get_coeff v t1 in
+      (k *. c, Mult(k, r))
+;;
+
+(*
+  isolate : string -> formula -> formula
+
+  Isole v dans la formule afin d'obtenir une égalité ou une borne par rapport aux autres variables, ou à une constante
+*)
+let rec isolate v formula = match formula with
+  | ComparF(lhs, Lt, rhs) -> (* A < B ---> Fourier-Motzkin *)
+    let diff = simplify_term (Sub(lhs, rhs)) in (* A - B < 0*)
+    let q, r = get_coeff v diff in (* qx +. r < 0*)
+    if q = 0. then (* r < 0, condition indépendante *)
+        ComparF(simplify_term r, Lt, Val 0.)
+    else if q > 0. then
+      let new_rhs = Mult(-1. /. q, r) in (* x < -(1/q)r *)
+      ComparF(Var v, Lt, simplify_term new_rhs)
+    else 
+      let new_rhs = Mult(1. /. q, r) in (* x > - (1/q)r car q négatif *)
+      ComparF(simplify_term new_rhs, Lt, Var v)
+
+  | ComparF(lhs, Equal, rhs) -> (* A = B ---> classiquement, Pivot de Gauss *)
+    let diff = simplify_term (Sub (lhs, rhs)) in (* A - B = 0*)
+    let q,r = get_coeff v diff in (* qx + r = 0*)
+    if q = 0. then (* r = 0 *)
+      ComparF(simplify_term r, Equal, Val 0.0)
+    else
+      ComparF(Var v, Equal, Mult(-1. /. q,simplify_term r))
+  | _ -> formula
+
+(* === FIN FONCTIONS LOT 2 === *)
+
 (*
   convert_single_conj : string -> formula -> step3_result
   
@@ -437,28 +556,21 @@ let rec flatten_disjunctions = function
   - sup : termes de la forme x < u (bornes supérieures)  
   - eq : termes de la forme w = x (égalités)
   - independent : termes χ où x n'apparaît pas
+
+  *Adaptée pour le Lot 2 : contains_var est remplacé par isolate
 *)
 let convert_single_conj target_var body =
   let conjunct_list = flatten_conjunctions body in
   List.fold_left (fun acc current_atom ->
-    (* On vérifie si l'atome contient la variable cible *)
-    (* Note: il faut gérer le cas où les deux côtés sont des variables *)
-    let contains_var = match current_atom with
-      | ComparF(Var x, _, Var y) -> x = target_var || y = target_var
-      | ComparF(Var x, _, _) -> x = target_var
-      | ComparF(_, _, Var x) -> x = target_var
-      | _ -> false
-    in
-    if not contains_var then
-      (* L'atome ne dépend pas de x, va dans 'independent' *)
-      { acc with independent = current_atom :: acc.independent }
-    else
-      (* L'atome dépend de x, on le classe selon sa forme *)
-      match classify_x_constraint target_var current_atom with
-      | `Inf -> { acc with inf = current_atom :: acc.inf }
-      | `Sup -> { acc with sup = current_atom :: acc.sup }
-      | `Eq -> { acc with eq = current_atom :: acc.eq }
-      | `Other -> { acc with independent = current_atom :: acc.independent }
+    (* Si x n'est pas présent, ça renvoie juste l'atome simplifié *)
+    let isolated_atom = isolate target_var current_atom in
+
+    match classify_x_constraint target_var isolated_atom with
+      | `Inf -> { acc with inf = isolated_atom :: acc.inf }
+      | `Sup -> { acc with sup = isolated_atom :: acc.sup }
+      | `Eq -> { acc with eq = isolated_atom :: acc.eq }
+      (* x n'est pas là (ou coeff = 0) *)
+      | `Other -> { acc with independent = isolated_atom :: acc.independent }
   ) empty_step3_result conjunct_list
 
 (*
@@ -793,39 +905,15 @@ let final_test f name =
 ;;
 
 print_string "\n=== TEST FINAL : Exemple de Prise de décision ===\n";;
-final_test example_1 "Exemple 1"
+final_test example_1 "Exemple 1";;
 
-let rec simplify_term t = match t with
-  | Val v -> Val v
-  | Var x -> Var x
-  | Add(t1, t2) -> 
-    let s1 = simplify_term t1 in
-    let s2 = simplify_term t2 in
-    begin match (s1, s2) with
-    | (Val a, Val b) -> Val (a + b) 
-    | (Val 0, t) -> t
-    | (t, Val 0) -> t
-    (* Associativité *)
-    | (Add(sub_t, Val a), Val b) -> Add(sub_t, Val (a + b))
-    | (Val a, Add(Val b, sub_t)) -> Add(Val (a + b), sub_t)
-    | _ -> Add(s1, s2)
-    end
-  | Sub(t1, t2) ->
-    let s1 = simplify_term t1 in
-    let s2 = simplify_term t2 in
-    begin match (s1, s2) with
-    | (Val a, Val b) -> Val (a - b)
-    | (t, Val 0) -> t
-    | (Val 0, t) -> Mult(-1, t)
-    | (t1, t2) when t1 = t2 -> Val 0
-    | _ -> Sub(s1, s2)
-    end
-  | Mult(k, t) ->
-    let s = simplify_term t in
-    match s with
-    | Val v -> Val (k * v)
-    | Mult(k2, sub_t) -> Mult(k * k2, sub_t)
-    | _ -> if k = 0 then Val 0
-      else if k = 1 then s
-      else Mult(k, s)
-;;
+print_string "\n=== LOT 2 ===\n";;
+
+let test_lra_1 = 
+  exists "x" (
+    conj 
+      (lt (mul 2 (var "x")) (val_ 10))  (* 2x < 10 *)
+      (lt (val_ 3) (var "x"))             (* 3 < x *)
+  );;
+
+final_test test_lra_1 "TEST LRA 1"

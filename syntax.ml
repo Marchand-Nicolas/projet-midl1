@@ -90,11 +90,13 @@ open SyntaxTree
 
 let rec rep_term = function
   | Var x -> x
-  | Val x -> string_of_float x
+  | Val x -> Printf.sprintf "%.2f" x
   | Add(x,y) -> rep_term x ^ " + " ^ rep_term y
   | Sub(x,y) -> rep_term x ^ " - (" ^ rep_term y ^ ")"
-  | Mult(a,x) -> string_of_float a ^ "(" ^ rep_term x ^ ")"
-
+  | Mult(a,x) -> 
+      if a = 1.0 then rep_term x
+      else if a = -1.0 then "-" ^ rep_term x
+      else (Printf.sprintf "%.2f" a) ^ "(" ^ rep_term x ^ ")"
 let rec rep_formula = function
   | Const c -> rep_const c
   | ComparF(f, op, g) -> sprintf
@@ -447,6 +449,31 @@ let rec flatten_disjunctions = function
 
 (* === DEBUT FONCTIONS LOT 2 === *)
 
+(* expand_term : term -> term
+   Distribue les multiplications : k * (a + b)  --->  k*a + k*b 
+*)
+let rec expand_term t = match t with
+  (* On descend récursivement d'abord *)
+  | Add(t1, t2) -> Add(expand_term t1, expand_term t2)
+  | Sub(t1, t2) -> Sub(expand_term t1, expand_term t2)
+  
+  | Mult(k, t') ->
+      (* On regarde ce qu'il y a à l'intérieur après expansion *)
+      let expanded_inner = expand_term t' in
+      begin match expanded_inner with
+      (* k(A + B) = kA + kB *)
+      | Add(a, b) -> Add(expand_term (Mult(k, a)), expand_term (Mult(k, b)))
+      (* k(A - B) = kA - kB *)
+      | Sub(a, b) -> Sub(expand_term (Mult(k, a)), expand_term (Mult(k, b)))
+      | Val v -> Val (k *. v)
+      (* k1 * (k2 * x) = (k1*k2) * x *)
+      | Mult(k2, x) -> Mult(k *. k2, x)
+      
+      | _ -> Mult(k, expanded_inner)
+      end
+  | _ -> t
+;;
+
 (*
 simplify_term : term -> term
 
@@ -796,8 +823,10 @@ let rec simplify f = match f with
   | ComparF(Val v1, Equal, Val v2) ->
     if v1 = v2 then top else bottom
   | ComparF(t1, op, t2) ->
-      let s1 = simplify_term t1 in
-      let s2 = simplify_term t2 in
+      let e1 = expand_term t1 in
+      let e2 = expand_term t2 in
+      let s1 = simplify_term e1 in
+      let s2 = simplify_term e2 in
       if s1 <> t1 || s2 <> t2 then simplify (ComparF(s1, op, s2)) (* On relance si qlqc a changé *)
       else f
   | BoolF(g, op, h) -> 
@@ -928,7 +957,7 @@ final_test example_1 "Exemple 1";;
 
 print_string "\n=== LOT 2 ===\n";;
 
-let test_arith_1 = (*∃x ∈ ℤ, 2x < 10 V 3 < x*)
+let test_arith_1 = (*∃x ∈ ℤ, 2x < 10 ∧ 3 < x*)
   exists "x" (
     conj 
       (lt (mul 2 (var "x")) (val_ 10))
@@ -937,7 +966,7 @@ let test_arith_1 = (*∃x ∈ ℤ, 2x < 10 V 3 < x*)
 
 final_test test_arith_1 "TEST Arithmétique 1";;
 
-let test_arith_2 = (* ∃ x ∈ ℤ, -2x < -10 V x < 8 *)
+let test_arith_2 = (* ∃ x ∈ ℤ, -2x < -10 ∧ x < 8 *)
   exists "x" (
     conj 
       (lt (mul (-2) (var "x")) (val_ (-10)))
@@ -946,9 +975,18 @@ let test_arith_2 = (* ∃ x ∈ ℤ, -2x < -10 V x < 8 *)
 
 final_test test_arith_2 "TEST Arithmétique 2";;
 
-let test_arith_3 = 
+let test_arith_3 = (* ∃ x ∈ ℤ, x + 5 < x + 2 *)
   exists "x" (
     lt (add (var "x") (val_ 5)) (add (var "x") (val_ 2))
   );;
 
 final_test test_arith_3 "TEST Arithmétique 3";;
+
+let test_arith_4 = (* ∃ x ∈ ℤ, 2x + y < 10 ∧ z < 3x *)
+  exists "x" (
+    conj
+      (lt (add (mul 2 (var "x")) (var "y")) (val_ 10))
+      (lt (var "z") (mul 3 (var "x")))
+  );;
+
+final_test test_arith_4 "TEST Arithmétique 4";;

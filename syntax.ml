@@ -88,11 +88,27 @@ end;;
 open Printf
 open SyntaxTree
 
+(*
+rep_term : term -> string
+renvoie la représentation de l'expression algébrique en chaîne de caractères
+*)
 let rec rep_term = function
   | Var x -> x
   | Val x -> Printf.sprintf "%.2f" x
-  | Add(x,y) -> rep_term x ^ " + " ^ rep_term y
-  | Sub(x,y) -> rep_term x ^ " - (" ^ rep_term y ^ ")"
+  | Add(x,y) ->
+    let s2 = rep_term y in
+      (* transforme les + - en - *)
+      if String.length s2 > 0 && s2.[0] = '-' then
+        rep_term x ^ " - " ^ (String.sub s2 1 (String.length s2 - 1))
+      else
+        rep_term x ^ " + " ^ s2
+  | Sub(x,y) ->
+    let s2 = rep_term y in
+      (* transforme les - - en + *)
+      if String.length s2 > 0 && s2.[0] = '-' then
+        rep_term x ^ " + " ^ (String.sub s2 1 (String.length s2 - 1))
+      else
+        rep_term x ^ " - " ^ s2
   | Mult(a,x) -> 
       if a = 1.0 then rep_term x
       else if a = -1.0 then "-" ^ rep_term x

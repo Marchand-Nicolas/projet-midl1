@@ -139,7 +139,7 @@
       ],
       // Right column
       [
-        *Assignment Details:*
+        *Détails du projet :*
         #if "course" in details [
           - *UE :* #details.course
         ]

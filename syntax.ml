@@ -66,16 +66,16 @@ module SyntaxTree = struct
   let rep_number = string_of_float;;
 
   let top = Const(Top);;
-let bottom = Const(Bottom);;
-let forall v f = QuantifF(Forall, v, f);;
-let exists v f = QuantifF(Exists, v, f);;
-let equal f g = ComparF(f,Equal,g);;
-let lt f g = ComparF(f,Lt, g);;
-let notf f = NotF(f);;
-let conj f g = BoolF(f,Conj,g);;
-let disj f g = BoolF(f,Disj,g);;
-let implies f g = BoolF(notf f,Disj, g);;
-let var x = Var x;;
+  let bottom = Const(Bottom);;
+  let forall v f = QuantifF(Forall, v, f);;
+  let exists v f = QuantifF(Exists, v, f);;
+  let equal f g = ComparF(f,Equal,g);;
+  let lt f g = ComparF(f,Lt, g);;
+  let notf f = NotF(f);;
+  let conj f g = BoolF(f,Conj,g);;
+  let disj f g = BoolF(f,Disj,g);;
+  let implies f g = BoolF(notf f,Disj, g);;
+  let var x = Var x;;
 
 let val_ k = Val (float_of_int k);;
 
@@ -126,25 +126,6 @@ let rec rep_formula = function
 ;;
 
 let rec print_formula f = print_string (rep_formula f ^ "\n");;
-
-(*
-signature :
-  dual : formula -> formula
-
-Cette fonction renvoie la forme duale de la formule passée en paramètres.
-*)
-let dual f =
-  let dual_op = function
-    | Conj -> Disj
-    | Disj -> Conj
-  in
-  let rec aux = function
-    | QuantifF(Forall, v, f') -> QuantifF(Forall,v, aux f')
-    | QuantifF(Exists, v, f') -> QuantifF(Exists, v, aux f')
-    | NotF(f') -> NotF(aux f')
-    | BoolF(f', op, g') -> BoolF(f', dual_op op, g') 
-    | _ -> f
-  in aux f;;
 
 (* 
 signature : 
@@ -205,8 +186,8 @@ let is_prenex f =
   print_formula example_2;;
 
 
-  (* Step 1: We assume all formulas are in prenex form *)
-  (* Step 2: Convert universal quantifier to existential quantifier while preserving the formula meaning *)
+  (* Étape 1: On suppose que la formule est déjà en forme prénexe *)
+  (* Étape 2: Conversion des quantificateurs unversels en existentiels  *)
   let rec univ_to_exist = function 
     | QuantifF(Forall, v, f') -> notf (exists v (notf (univ_to_exist f')))
     | f -> f
@@ -220,13 +201,13 @@ let example_univ =
   )
 ;;
 
-print_string "Example univ: ";;
+print_string "Exemple univ: ";;
 print_formula example_univ;;
 
-print_string "Example univ to exist: ";;
+print_string "Exemple univ to exist: ";;
 print_formula (univ_to_exist example_univ);;
 
-(* Step 2.1 Put negations inside the formula (negation normal form) *)
+(* Étape 2.1 Tirer les négations à l'intérieur de la formule (forme normale négative) *)
 let rec neg_nf = function
   | NotF(QuantifF(Exists, v, f')) -> QuantifF(Forall, v, neg_nf (NotF(f')))
   | NotF(QuantifF(Forall, v, f')) -> QuantifF(Exists, v, neg_nf (NotF(f')))
@@ -265,7 +246,7 @@ print_string "Example neg inside 2: ";;
 print_formula (neg_nf example_neg_exist_2);;
 
 
-(* Step 2.2: Eliminate negations in front of relations *)
+(* Étape 2.2: Élimination des négations devant les relations *)
 let rec neg_elim = function
   | NotF(ComparF(g, Equal, h)) -> disj (lt g h) (lt h g)
   | NotF(ComparF(g, Lt, h)) -> disj (lt h g) (equal g h)
@@ -295,7 +276,7 @@ print_string "Example neg elim 2: ";;
 print_formula (neg_elim example_relation_formula_2);;
 
 
-(* Step 2.3: Transform into disjunctive normal form *)
+(* Étape 2.3: Transforme en forme normale disjonctive *)
 let rec disj_nf = function
   | QuantifF (q, v, f') -> QuantifF (q, v, disj_nf f')
   | BoolF(g, op, h) ->
@@ -339,7 +320,7 @@ print_formula example_conj_nf;;
 print_string "Example disj_nf from conjunctive normal form: ";;
 print_formula (disj_nf example_conj_nf);;
 
-(* Step 2.4 : Pushing exists within the disjunction *)
+(* Étape 2.4 : Tirer les quantifications existentielles dans la disjonction *)
 let rec push_exists = function
   | QuantifF(Exists, x, BoolF(g, Disj, h)) -> (* Cas où la propagation s'effectue *) 
       let new_g = push_exists (exists x g) in
@@ -370,7 +351,7 @@ print_formula example_exist_outside_disj;;
 print_string "Example push_exists: ";;
 print_formula (push_exists example_exist_outside_disj);;
 
-(* Step 3: Remove variable *)
+(* Étape 3: Suppression des variables *)
 
 (*
 signature :
@@ -412,7 +393,6 @@ signature :
 
 Cette fonction vérifie la présence de la variable v (supposément introduite dans un quantificateur) dans une conjonction
 Cette fonction renvoie:
-  2 si la conjonction contient v < v
   1 si v est présent d'une autre manière dans la conjonction
   0 sinon (v absent)
 *)
@@ -429,7 +409,7 @@ print_string (sprintf "Exemple check_conj (x < x) : %d" (check_conj "x" (conj (l
 print_string (sprintf "Exemple check_conj (x present) : %d" (check_conj "x" (conj (equal (var "x") (var "x")) (lt (var "x") (var "y")))) ^ "\n");;
 print_string (sprintf "Exemple check_conj (x absent) : %d" (check_conj "x" (conj (equal (var "y") (var "y")) (lt (var "z") (var "y")))) ^ "\n");;
 
-(* Steps 3.3+: non triviaux. On convertit la disjonction tableau, pour réaliser les étapes suivantes plus facilement *)
+(* Étape 3.3+: non triviaux. On convertit la disjonction tableau, pour réaliser les étapes suivantes plus facilement *)
 
 (* Structure stockant les disjonctions classées par type de contrainte sur la variable quantifiée *)
 type step3_result = {
@@ -664,7 +644,7 @@ print_formula (push_exists example_exist_outside_disj);;
 print_string "\nOutput : ";;
 print_step3_result_list (convert_conj_to_list (push_exists example_exist_outside_disj));;
 
-(* Step 3.4, 3.5, 3.6 : Élimination de la variable quantifiée *)
+(* Étape 3.4, 3.5, 3.6 : Élimination de la variable quantifiée *)
 
 (* Helper: construit une conjonction à partir d'une liste de formules *)
 let rec make_conj_from_list = function
@@ -688,7 +668,7 @@ let get_other_term target_var = function
   | _ -> failwith "Formula doesn't contain target variable"
 
 (*
-  Step 3.4 : Si (w_k = x) est présent
+  Étape 3.4 : Si (w_k = x) est présent
   
   On choisit w_0 parmi les w_k, et on substitue
 *)
@@ -716,7 +696,7 @@ let step3_4 target_var groups =
     Some (make_conj_from_list (new_sup @ new_inf @ new_eq @ groups.independent))
 
 (*
-  Step 3.5 : Si (x < u_i) ET (v_j < x) sont présents (mais pas d'égalité)
+  Étape 3.5 : Si (x < u_i) ET (v_j < x) sont présents (mais pas d'égalité)
 *)
 let step3_5 target_var groups =
   if groups.eq <> [] then None  (* Étape 3.4 s'applique à la place *)
@@ -733,7 +713,7 @@ let step3_5 target_var groups =
     Some (make_conj_from_list (pairs @ groups.independent))
 
 (*
-  Step 3.6 : Si uniquement (x < u_i) OU uniquement (v_j < x) est présent
+  Étape 3.6 : Si uniquement (x < u_i) OU uniquement (v_j < x) est présent
 *)
 let step3_6 groups =
   if groups.eq <> [] then None  (* Étape 3.4 s'applique *)
@@ -897,7 +877,7 @@ let solve f =
 
 (* === Tests === *)
 
-(* Test Step 3.4 : cas avec égalité *)
+(* Test Étape 3.4 : cas avec égalité *)
 let test_step3_4 =
   exists "x" (
     conj (equal (var "x") (var "w"))
@@ -905,13 +885,13 @@ let test_step3_4 =
         (lt (var "v") (var "x")))
   );;
 
-print_string "\n=== Test Step 3.4 (avec égalité) ===\n";;
+print_string "\n=== Test Étape 3.4 (avec égalité) ===\n";;
 print_string "Input : ";;
 print_formula test_step3_4;;
 print_string "Output : ";;
 print_formula (eliminate_exists test_step3_4);;
 
-(* Test Step 3.5 : cas sans égalité mais avec bornes inf et sup *)
+(* Test Étape 3.5 : cas sans égalité mais avec bornes inf et sup *)
 let test_step3_5 =
   exists "x" (
     conj (lt (var "x") (var "u1"))
@@ -920,13 +900,13 @@ let test_step3_5 =
           (lt (var "v2") (var "x"))))
   );;
 
-print_string "\n=== Test Step 3.5 (bornes inf et sup) ===\n";;
+print_string "\n=== Test Étape 3.5 (bornes inf et sup) ===\n";;
 print_string "Input : ";;
 print_formula test_step3_5;;
 print_string "Output : ";;
 print_formula (eliminate_exists test_step3_5);;
 
-(* Test Step 3.6 : cas avec uniquement des bornes supérieures *)
+(* Test Étape 3.6 : cas avec uniquement des bornes supérieures *)
 let test_step3_6_sup =
   exists "x" (
     conj (lt (var "x") (var "u1"))
@@ -934,20 +914,20 @@ let test_step3_6_sup =
         (lt (var "a") (var "b")))  (* condition indépendante *)
   );;
 
-print_string "\n=== Test Step 3.6 (uniquement bornes sup) ===\n";;
+print_string "\n=== Test Étape 3.6 (uniquement bornes sup) ===\n";;
 print_string "Input : ";;
 print_formula test_step3_6_sup;;
 print_string "Output : ";;
 print_formula (eliminate_exists test_step3_6_sup);;
 
-(* Test Step 3.6 : cas avec uniquement des bornes inférieures *)
+(* Test Étape 3.6 : cas avec uniquement des bornes inférieures *)
 let test_step3_6_inf =
   exists "x" (
     conj (lt (var "v1") (var "x"))
       (lt (var "v2") (var "x"))
   );;
 
-print_string "\n=== Test Step 3.6 (uniquement bornes inf) ===\n";;
+print_string "\n=== Test Étape 3.6 (uniquement bornes inf) ===\n";;
 print_string "Input : ";;
 print_formula test_step3_6_inf;;
 print_string "Output : ";;

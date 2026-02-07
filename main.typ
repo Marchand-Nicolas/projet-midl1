@@ -92,7 +92,7 @@ Nous avons créé des fonctions macro permettant une construction assez simple d
   [$x times y$], [`mul x y`]
 )
 
-*Exemples*
+== Exemples
 
 - $forall x.forall y.(x<y->exists z.(x<z and z<y))$ s'écrira : 
   #sourcecode[

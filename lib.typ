@@ -100,9 +100,11 @@
       dir: ltr,
       spacing: 1em,
       text(size: 20pt, weight: "bold")[
+        #v(.5em)
         #for author in authors {
           author
           "\n"
+          v(.5em)
         }
       ],
       

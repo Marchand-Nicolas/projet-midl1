@@ -841,9 +841,13 @@ let rec simplify f = match f with
         | (_, Disj, Const Top) -> top
         | _ -> BoolF(gs, op, hs)
       end
-  | NotF(Const Top) -> bottom
-  | NotF(Const Bottom) -> top
-  | NotF(f) -> NotF(simplify f)
+  | NotF(f) ->
+      let sf = simplify f in
+      begin match sf with
+      | Const Top -> bottom
+      | Const Bottom -> top
+      | _ -> NotF(sf)
+      end
   | _ -> f;;
 
 (* 
@@ -986,3 +990,7 @@ let test_arith_4 = (* ∃ x ∈ ℤ, 2x + y < 10 ∧ z < 3x *)
   );;
 
 final_test test_arith_4 "TEST Arithmétique 4";;
+
+let test_5 = NotF (NotF (Const Bottom));;
+
+final_test test_5 "TEST négation de constante";;

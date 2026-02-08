@@ -1,3 +1,6 @@
 /.dist
 /__pycache__
 /.vscode
+syntax_test
+syntax.cmi
+syntax.cmo

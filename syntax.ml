@@ -1,5 +1,51 @@
 (* Symbols : ⊤ ⊥ ∧ ∨ ¬ = < ⩽ > ⩾ ∀ ∃ *)
 
+module Rational = struct
+  type t = { num : int; denom : int }
+
+  let rec pgcd a b =
+    if b = 0 then abs a else pgcd b (a mod b)
+  
+  let make n d =
+    if d = 0 then failwith "division par zero"
+    else
+      let g = pgcd n d in
+      let signed_n = if d < 0 then -n else n in
+      let signed_d = abs d in
+      { num = signed_n / g; denom = signed_d / g }
+
+  let zero = { num = 0; denom = 1 }
+  let one = { num = 1; denom = 1 }
+  let minus_one = { num = -1; denom = 1 }
+
+  let add f1 f2 =
+    make (f1.num * f2.denom + f2.num * f1.denom) (f1.denom * f2.denom)
+
+  let sub f1 f2 =
+    make (f1.num * f2.denom - f2.num * f1.denom) (f1.denom * f2.denom)
+
+  let mul f1 f2 =
+    make (f1.num * f2.num) (f1.denom * f2.denom)
+
+  (* Division : a/b / c/d = a/b * d/c *)
+  let div f1 f2 =
+    if f2.num = 0 then failwith "Division par fraction nulle"
+    else make (f1.num * f2.denom) (f1.denom * f2.num)
+    
+  let neg f = { num = -f.num; denom = f.denom }
+
+  let equal f1 f2 = (f1.num = f2.num) && (f1.denom = f2.denom)
+  
+  let lt f1 f2 = 
+    (f1.num * f2.denom) < (f2.num * f1.denom)
+
+  let to_string f =
+    if f.denom = 1 then string_of_int f.num
+    else Printf.sprintf "(%d/%d)" f.num f.denom
+    
+  let of_int k = make k 1
+end
+
 module SyntaxTree = struct
 
   type compar_op =
@@ -29,10 +75,10 @@ module SyntaxTree = struct
   *)
   type term = 
     | Var of string
-    | Val of float
+    | Val of Rational.t
     | Add of term * term
     | Sub of term * term
-    | Mult of float * term
+    | Mult of Rational.t * term
 
   type formula =
     | Const of bool_const
@@ -76,43 +122,53 @@ module SyntaxTree = struct
   let disj f g = BoolF(f,Disj,g);;
   let implies f g = BoolF(notf f,Disj, g);;
   let var x = Var x;;
-
-let val_ k = Val (float_of_int k);;
+  let val_ k = Val (Rational.of_int k);; 
+  let n_ x = Rational.of_int x;;
+  let frac n d = Val (Rational.make n d);;
+  let add t1 t2 = Add(t1, t2);;
+  let sub t1 t2 = Sub(t1, t2);;
+  let mul k t = Mult(Rational.of_int k, t);;
+  let mul_frac n d t = Mult(Rational.make n d, t);;
 
 let add t1 t2 = Add(t1, t2);;
 let sub t1 t2 = Sub(t1, t2);;
-let mul k t = Mult(float_of_int k, t);;
+let int_mul k t = Mult({num = k ; denom = 1}, t);;
+let mul k t = Mult(k, t);
 
 end;;
 
 open Printf
 open SyntaxTree
-
 (*
 rep_term : term -> string
 renvoie la représentation de l'expression algébrique en chaîne de caractères
 *)
-let rec rep_term = function
+let rec rep_term t = match t with
   | Var x -> x
-  | Val x -> Printf.sprintf "%.2f" x
-  | Add(x,y) ->
-    let s2 = rep_term y in
-      (* transforme les + - en - *)
-      if String.length s2 > 0 && s2.[0] = '-' then
-        rep_term x ^ " - " ^ (String.sub s2 1 (String.length s2 - 1))
-      else
-        rep_term x ^ " + " ^ s2
-  | Sub(x,y) ->
-    let s2 = rep_term y in
-      (* transforme les - - en + *)
-      if String.length s2 > 0 && s2.[0] = '-' then
-        rep_term x ^ " + " ^ (String.sub s2 1 (String.length s2 - 1))
-      else
-        rep_term x ^ " - " ^ s2
-  | Mult(a,x) -> 
-      if a = 1.0 then rep_term x
-      else if a = -1.0 then "-" ^ rep_term x
-      else (Printf.sprintf "%.2f" a) ^ "(" ^ rep_term x ^ ")"
+  | Val v -> Rational.to_string v
+
+  | Add(t1, t2) -> rep_term t1 ^ " + " ^ rep_term t2
+  
+  | Sub(t1, t2) -> 
+      let right = match t2 with
+        | Add _ | Sub _ -> "(" ^ rep_term t2 ^ ")"
+        | _ -> rep_term t2
+      in
+      rep_term t1 ^ " - " ^ right
+
+  | Mult(k, t) ->
+      if Rational.equal k Rational.one then rep_term t
+      else if Rational.equal k Rational.minus_one then 
+        match t with
+        | Var _ | Val _ | Mult _ -> "-" ^ rep_term t
+        | _ -> "-(" ^ rep_term t ^ ")"
+      else if Rational.equal k Rational.zero then "0"
+      else 
+        let k_str = Rational.to_string k in
+        match t with
+        | Var _ -> k_str ^ rep_term t 
+        | _ -> k_str ^ "(" ^ rep_term t ^ ")"
+;;
 let rec rep_formula = function
   | Const c -> rep_const c
   | ComparF(f, op, g) -> sprintf
@@ -461,10 +517,9 @@ let rec expand_term t = match t with
       | Add(a, b) -> Add(expand_term (Mult(k, a)), expand_term (Mult(k, b)))
       (* k(A - B) = kA - kB *)
       | Sub(a, b) -> Sub(expand_term (Mult(k, a)), expand_term (Mult(k, b)))
-      | Val v -> Val (k *. v)
+      | Val v -> Val (Rational.mul k v)
       (* k1 * (k2 * x) = (k1*k2) * x *)
-      | Mult(k2, x) -> Mult(k *. k2, x)
-      
+      | Mult(k2, x) -> Mult(Rational.mul k k2, x)
       | _ -> Mult(k, expanded_inner)
       end
   | _ -> t
@@ -479,43 +534,40 @@ let rec simplify_term t =
   match t with
   | Val v -> Val v
   | Var x -> Var x
-
   | Add(t1, t2) -> 
-    (* bottom-up *)
     let s1 = simplify_term t1 in
     let s2 = simplify_term t2 in
-    
     begin match (s1, s2) with
-    | (Val a, Val b) -> Val (a +. b) 
-    (* 0 +. x = x*)
-    | (Val 0., t) -> t
-    | (t, Val 0.) -> t
-    (* Associativité *)
-    | (Add(sub_t, Val a), Val b) -> Add(sub_t, Val (a +. b))
-    | (Val a, Add(Val b, sub_t)) -> Add(Val (a +. b), sub_t)
+    | (Val a, Val b) -> Val (Rational.add a b) 
+    | (Val v, t) when Rational.equal v Rational.zero -> t
+    | (t, Val v) when Rational.equal v Rational.zero -> t
+    | (t, Val v) when Rational.lt v Rational.zero -> 
+          Sub(t, Val (Rational.neg v))
+    | (Add(sub_t, Val a), Val b) -> Add(sub_t, Val (Rational.add a b))
+    | (Val a, Add(Val b, sub_t)) -> Add(Val (Rational.add a b), sub_t)
     | _ -> Add(s1, s2)
     end
-
   | Sub(t1, t2) ->
     let s1 = simplify_term t1 in
     let s2 = simplify_term t2 in
     begin match (s1, s2) with
-    | (Val a, Val b) -> Val (a -. b)
-    | (t, Val 0.) -> t (* x - 0 = x *)
-    | (Val 0., t) -> Mult(-1., t) (* 0 - x = -1 * x *)
-    | (t1, t2) when t1 = t2 -> Val 0. (* x - x = 0 *)
+    | (Val a, Val b) -> Val (Rational.sub a b)
+    | (t, Val v) when Rational.equal v Rational.zero -> t
+    | (Val v, t) when Rational.equal v Rational.zero -> Mult(Rational.minus_one, t)
+    | (t, Val v) when Rational.lt v Rational.zero -> 
+          Add(t, Val (Rational.neg v))
+    | (t1, t2) when t1 = t2 -> Val Rational.zero
     | _ -> Sub(s1, s2)
     end
-
   | Mult(k, t) ->
     let s = simplify_term t in
     match s with
-    | Val v -> Val (k *. v)
-    | Mult(k2, sub_t) -> Mult(k *. k2, sub_t)
-    | _ -> if k = 0. then Val 0.  (* 0 * x = 0 *)
-      else if k = 1. then s  (* 1 * x = x *)
+    | Val v -> Val (Rational.mul k v)
+    | Mult(k2, sub_t) -> Mult(Rational.mul k k2, sub_t)
+    | _ -> if Rational.equal k Rational.zero then Val Rational.zero
+      else if Rational.equal k Rational.one then s
       else Mult(k, s)
-;; 
+;;
 
 (*
 get_coeff : string -> term -> (int * term)
@@ -526,27 +578,22 @@ En le voyant comme un polynôme de degré 1 à n+1 inconnues, on pourrait le voi
 P(v,x1,...,xn) = Q(v) + R(x1,...,xn)
 *)
 let rec get_coeff v t = match t with
-  (* bottom-up *)
-
-  (* pour notre variable cible, on renvoie (1,0) car v = 1v +. 0*)
-  | Var x when x = v -> (1., Val 0.)
-  (* pour une autre variable ou une constante, on a A = 0 v +. t *)
-  | Var _ | Val _ -> (0., t)
-
-  (* on somme les coefficients entre eux, de même pour les restes *)
+  | Var x when x = v -> (Rational.one, Val Rational.zero)
+  | Var _ | Val _ -> (Rational.zero, t)
+  
   | Add(t1, t2) ->
       let (c1, r1) = get_coeff v t1 in
       let (c2, r2) = get_coeff v t2 in
-      (c1 +. c2, Add(r1, r2))
+      (Rational.add c1 c2, Add(r1, r2))
 
   | Sub(t1, t2) ->
       let (c1, r1) = get_coeff v t1 in
       let (c2, r2) = get_coeff v t2 in
-      (c1 -. c2, Sub(r1, r2))
+      (Rational.sub c1 c2, Sub(r1, r2))
 
   | Mult(k, t1) ->
       let (c, r) = get_coeff v t1 in
-      (k *. c, Mult(k, r))
+      (Rational.mul k c, Mult(k, r))
 ;;
 
 (*
@@ -554,28 +601,30 @@ let rec get_coeff v t = match t with
 
   Isole v dans la formule afin d'obtenir une égalité ou une borne par rapport aux autres variables, ou à une constante
 *)
-let rec isolate v formula = match formula with
+let rec isolate x formula = match formula with
   | ComparF(lhs, Lt, rhs) -> (* A < B ---> Fourier-Motzkin *)
     let diff = simplify_term (Sub(lhs, rhs)) in (* A - B < 0*)
-    let q, r = get_coeff v diff in (* qx +. r < 0*)
-    if q = 0. then (* r < 0, condition indépendante *)
-        ComparF(simplify_term r, Lt, Val 0.)
-    else if q > 0. then
-      let new_rhs = Mult(-1. /. q, r) in (* x < -(1/q)r *)
-      ComparF(Var v, Lt, simplify_term new_rhs)
-    else 
-      let new_rhs = Mult(1. /. q, r) in (* x > - (1/q)r car q négatif *)
-      ComparF(simplify_term new_rhs, Lt, Var v)
-
-  | ComparF(lhs, Equal, rhs) -> (* A = B ---> classiquement, Pivot de Gauss *)
-    let diff = simplify_term (Sub (lhs, rhs)) in (* A - B = 0*)
-    let q,r = get_coeff v diff in (* qx + r = 0*)
-    if q = 0. then (* r = 0 *)
-      ComparF(simplify_term r, Equal, Val 0.0)
+    let q, r = get_coeff x diff in (* qx + r < 0*)
+    
+    if Rational.equal q Rational.zero then (* r < 0, condition indépendante *)
+        ComparF(simplify_term r, Lt, Val Rational.zero)
     else
-      ComparF(Var v, Equal, Mult(-1. /. q,simplify_term r))
-  | _ -> formula
+      let new_rhs = Mult(Rational.div Rational.minus_one q, r) in
+      if Rational.lt Rational.zero q then (* x < -r/q *)
+        ComparF(Var x, Lt, simplify_term new_rhs) 
+      else  (* x > -r/q car q négatif *)
+        ComparF(simplify_term new_rhs, Lt, Var x) 
 
+  | ComparF(lhs, Equal, rhs) -> (* ---> classiquement, Pivot de Gauss *)
+    let diff = simplify_term (Sub (lhs, rhs)) in (* A - B = 0 *)
+    let q, r = get_coeff x diff in (* qx + r = 0 *)
+    if Rational.equal q Rational.zero then (* r = 0 *)
+      ComparF(simplify_term r, Equal, Val Rational.zero)
+    else
+      let minus_r = Mult(Rational.minus_one, r) in (* x = -r/q *)
+      ComparF(Var x, Equal, simplify_term (Mult(Rational.div Rational.one q, minus_r)))
+  | _ -> formula
+;;
 (* === FIN FONCTIONS LOT 2 === *)
 
 (*
@@ -945,11 +994,15 @@ print_string "Output (après eliminate_exists): ";;
 print_formula (eliminate_exists (push_exists example_exist_outside_disj));;
 
 let final_test f name =
-  printf "Nom de la formule : \"%s\"\n" name;
-  print_string "Input initial : ";
-  print_formula f;
-  print_string "Output final : ";
-  print_formula (solve f)
+  if is_prenex f then begin
+    printf "Nom de la formule : \"%s\"\n" name;
+    print_string "Input initial : ";
+    print_formula f;
+    print_string "Output final : ";
+    print_formula (solve f);
+    end
+  else 
+    printf "La formule %s doit être sous forme prénexe" name;
 ;;
 
 print_string "\n=== TEST FINAL : Exemple de Prise de décision ===\n";;
@@ -960,7 +1013,7 @@ print_string "\n=== LOT 2 ===\n";;
 let test_arith_1 = (*∃x ∈ ℤ, 2x < 10 ∧ 3 < x*)
   exists "x" (
     conj 
-      (lt (mul 2 (var "x")) (val_ 10))
+      (lt (mul (n_ 2) (var "x")) (val_ 10))
       (lt (val_ 3) (var "x"))           
   );;
 
@@ -969,7 +1022,7 @@ final_test test_arith_1 "TEST Arithmétique 1";;
 let test_arith_2 = (* ∃ x ∈ ℤ, -2x < -10 ∧ x < 8 *)
   exists "x" (
     conj 
-      (lt (mul (-2) (var "x")) (val_ (-10)))
+      (lt (mul (n_ (-2)) (var "x")) (val_ (-10)))
       (lt (var "x") (val_ 8))
   );;
 
@@ -985,8 +1038,8 @@ final_test test_arith_3 "TEST Arithmétique 3";;
 let test_arith_4 = (* ∃ x ∈ ℤ, 2x + y < 10 ∧ z < 3x *)
   exists "x" (
     conj
-      (lt (add (mul 2 (var "x")) (var "y")) (val_ 10))
-      (lt (var "z") (mul 3 (var "x")))
+      (lt (add (mul (n_ 2) (var "x")) (var "y")) (val_ 10))
+      (lt (var "z") (mul (n_ 3) (var "x")))
   );;
 
 final_test test_arith_4 "TEST Arithmétique 4";;

@@ -17,6 +17,7 @@
 )
 
 #set enum(numbering: "a) i)")
+#set text(lang: "fr")
 
 #show: shorthands.with(
   ($<===$, $arrow.l.double.long$),
@@ -48,21 +49,22 @@ Nous avons donc choisi de classifier dans un dictionnaire toutes les contraintes
 = Lot 2
 Maintenant que nous pouvons appliquer notre procédure à toute proposition de la théorie des ordres denses, nous pouvons nous pencher sur l'arithmétique des nombres rationnels. On remarque que peu de choses changent, il n'y a pas de collision entre le prétraitement et la complexification des (in)égalités "générales" qui se résumaient à des comparaisons entre deux variables.
 
-Ce qui change le plus, c'est que l'on ne peut pas simplement avoir de majoration/minoration sur une variable $x$ en regardant le terme de gauche ou le terme de droite. Dans le cas d'une égalité, c'est facile ! Nous avons appris la méthode du pivot de Gauss qui convient parfaitement à cette situation, il nous suffira de l'appliquer à notre égalité pour isoler $x$. Dans le cas d'une inégalité, nous appliquons la même chose, la seule différence est qu'il faut faire attention aux changements de signe. Ainsi, nous obtenons des majorations/minorations de $x$ par rapport aux autres variables.
+Ce qui change le plus, c'est que l'on ne peut pas simplement avoir de majoration/minoration sur une variable $x$ en regardant le terme de gauche ou le terme de droite. Dans le cas d'une égalité, c'est facile ! Nous avons appris la méthode du pivot de Gauss qui convient parfaitement à cette situation, il nous suffira de l'appliquer à notre égalité pour isoler $x$. Dans le cas d'une inégalité, nous appliquons la même chose, la seule différence est qu'il faut faire attention aux changements de signe (c'est ce que l'on appelle l'"Élimination de Fourier-Motzkin"). Ainsi, nous obtenons des majorations/minorations de $x$ par rapport aux autres variables.
 
 Supposons l'inégalité : $A < B$. Dans ce cas, celle-ci est équivalente à $A - B < 0$.
-Nous pouvons effectuer une "division euclidienne" de $A - B$ par $x$. Ainsi, nous aurons un scalaire "quotient" $q$ et un reste $R$ ne dépendant pas de $x$. Cela nous donnera : $r < 0 <==> q x < -R$.
+Nous pouvons effectuer une extraction du coefficient $x$ dans $A - B$ (cela pourrait s'apparenter à une sorte de division euclidienne d'un polynôme de degré 1 par $x$). Ainsi, nous aurons un coefficient scalaire $q$ et un reste $R$ ne dépendant pas de $x$. Cela nous donnera : $q x + R < 0 <==> q x < -R$.
 - Dans le cas où $q = 0$, nous avons une proposition indépendante de $x$ : $R < 0$. 
 - Dans le cas où $q > 0$, nous avons $x < -R/q$
 - Dans le cas où $q < 0$, nous avons $x > -R/q$
 Le cas de l'égalité s'effectue de la même manière.
 
-C'est lors de cette normalisation de $x$ que l'on n'a pas besoin de traiter l'étape 3.2, mentionnée précedemment puisque l'on détecte directement une formule indépendante, équivalente à $0 < 0$ ; cas traité lors de l'étape 3.6. 
+C'est cette étape de normalisation qui rend l'étape 3.2 mentionnée précedemment (suppression triviale de $x < x$) obsolète : notre algorithme transforme naturellement $x < x$ en $0 < 0$, qui est identifié comme une formule indépendante (fausse) et traitée lors de l'étape 3.6.
 
+Nous avons d'abord introduit une fonction `simplify_term` qui simplifiera au maximum les formules algébriques, notamment à l'aide de la règle d'associativité, pour simplifier les calculs. Ensuite, nous avons créé la fonction d'extraction de coefficients `get_coeff` pour finalement l'appliquer à la fonction de normalisation `isolate`. 
 
-Nous avons d'abord introduit une fonction `simplify_term` qui simplifiera au maximum les formules algébriques, notamment à l'aide de la règle d'associativité, pour simplifier les calculs. Ensuite, nous avons créé la fonction de division euclidienne `get_coeff` pour finalement l'appliquer à la fonction de normalisation `isolate`. 
+Il a aussi fallu changer les fonctions implémentées précédemment : après avoir supprimé l'étape 3.2, nous avons rajouté les comparaisons arithmétiques à la fonction `simplify`. Nous pensions avoir fini lorsque l'exemple de proposition "$exists x . x + 5 > x + 2$" ne fonctionnait pas. Le dysfonctionnement venait de la fonction `check_var` car elle ne devait plus seulement regarder à droite et à gauche de l'inégalité, mais bien parcourir récursivement l'arbre syntaxique créé par les expressions arithmétiques à gauche et à droite. Ainsi, après avoir fait ce changement, notre procédure s'est mise à fonctionner sur tous nos tests.   
 
-Il a aussi fallu changer les fonctions implémentées précédemment : après avoir supprimé l'étape 3.2, nous avons rajouté les comparaisons arithmétiques à la fonction `simplify`, puis nous avons finalement ajusté la fonction `check_var` car elle ne doit plus seulement regarder à gauche, puis à droite de l'(in)égalité, mais bien jusqu'au fond de l'arbre créé par les expressions arithmétiques à gauche et à droite.    
+Il nous aurait été possible de traiter des fractions, cela nous aurait permis de coller avec 
 
 #pagebreak()
 

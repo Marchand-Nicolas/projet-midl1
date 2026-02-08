@@ -3,6 +3,8 @@
 #import "@preview/zebraw:0.5.5" : *
 #import "@preview/codelst:2.0.2": sourcecode
 
+#import "@preview/diagraph:0.3.6" : *
+
 #import "lib.typ": *
 
 #show: university-assignment.with(
@@ -18,6 +20,10 @@
 
 #set enum(numbering: "a) i)")
 #set text(lang: "fr")
+
+#let cdot = $dot.c$
+
+#show link: underline
 
 #show: shorthands.with(
   ($<===$, $arrow.l.double.long$),
@@ -64,8 +70,46 @@ Nous avons d'abord introduit une fonction `simplify_term` qui simplifiera au max
 
 Il a aussi fallu changer les fonctions implémentées précédemment : après avoir supprimé l'étape 3.2, nous avons rajouté les comparaisons arithmétiques à la fonction `simplify`. Nous pensions avoir fini lorsque l'exemple de proposition "$exists x . x + 5 > x + 2$" ne fonctionnait pas. Le dysfonctionnement venait de la fonction `check_var` car elle ne devait plus seulement regarder à droite et à gauche de l'inégalité, mais bien parcourir récursivement l'arbre syntaxique créé par les expressions arithmétiques à gauche et à droite. Ainsi, après avoir fait ce changement, notre procédure s'est mise à fonctionner sur tous nos tests.   
 
-Il nous aurait été possible de traiter des fractions, cela nous aurait permis de coller avec 
+En dernière retouche, nous avons finalement remplacé nos flottants par un type `Rational` afin de représenter nos nombres par des fractions, ce qui nous permet de ne pas avoir d'approximations lors des calculs. Par exemple : $exists x. x + 0.3 < x + 0.1 + 0.2$ qui est faux, mais renvoyait vrai car $0.1 + 0.2$ est stocké comme "$0.300000000000000044$" au lieu de $0,3$ :
+#sourcecode(numbering:none)[
+```
+utop # 0.1 +. 0.2;;
+- : float = 0.300000000000000044
+```
+]
+#pagebreak()
 
+== Ouvertures
+- Bien que notre implémentation de l'élimination des quantificateurs soit maintenant fonctionnelle pour l'Arithmétique Linéaire Rationnelle, elle repose sur une version standard de l'algorithme de Fourier-Motzkin. Cette méthode est "naïve" car elle peut créer des inégalités redondantes, et en crée beaucoup. #link("https://fr.wikipedia.org/wiki/%C3%89limination_de_Fourier-Motzkin#Extension_:_acc%C3%A9l%C3%A9ration_de_Imbert")[La page Wikipedia] nous introduit alors à une accélération de l'algorithme créée par Jean-Louis Imbert en 1990 qui permet d'éliminer certaines contraintes selon la manière dont elles ont été construites, réduisant considérablement les formules intermédiaires de la procédure. L'intégration de cet algorithme aurait cependant nécessité une refonte profonde des structures de données que l'on utilise car elle nécessite une traçabilité des inégalités prises en compte. 
+
+- Nous aurions pu généraliser notre algorithme à la #link("https://fr.wikipedia.org/wiki/Corps_r%C3%A9el_clos#Th%C3%A9orie_des_corps_r%C3%A9els_clos")[Théorie des corps réels clos], qui aurait nécessité l'implémentation de l'algorithme de #link("https://jfla.inria.fr/static/slides/jfla2025-Vermande.pdf")[Décomposition Algébrique Cylindrique] de Collins.
+- Un cadre d'étude intéressant est aussi l'#link("https://fr.wikipedia.org/wiki/Arithm%C3%A9tique_de_Presburger")[Arithmétique Linéaire Entière, dite de "Presburger"], beaucoup plus proche de l'Arithmétique Linéaire Rationnelle, à l'exception de 
+
+#pagebreak()
+
+= Lot 3
+Il nous est demandé de faire un jeu consistant pour le joueur $J$ de trouver un exemple validant une formule satisfiable ou invalidant un résultat non satisfiable. L'ordinateur $O$ doit alors trouver une stratégie pour bloquer les choix du joueur. Dans un premier temps, l'ordinateur doit vérifier la véracité de la formule en appliquant totalement la suppression des quantificateurs. Après avoir enregistré l'ordre des quantificateurs dans la formule de base (sous forme prénexe), il faut que $O$ ait une bonne vue d'ensemble des contraintes imposées à chaque variable. Notre implémentation des clauses après le prétraitement est déjà parfaite, elle représente tout ce dont on a besoin. Raisonnons par l'exemple :
+
+Soit la formule $exists x. forall y. exists z. forall t.$$P(x,y,z,t)$ avec le prédicat $P(x,y,z,t) equiv psi_1(x,y) or psi_2(x,y,z) or psi_3(x,y,z,t)$ où les $psi_i$ sont des prédicats représentants un ensemble de disjonction. Représentons l'arbre $({x, y, z, t} union {(psi_i)}, {(a,psi) | psi "dépend de "a})$ :
+#raw-render(
+  ```dot
+  digraph {
+    x -> psi_1
+    x -> psi_2
+    x -> psi_3
+    y -> psi_1
+    y -> psi_2
+    y -> psi_3
+    z -> psi_2
+    z -> psi_3
+    t -> psi_3
+  }
+  ```
+)
+Au premier tour, $J$ choisit une valeur valide pour tous les $psi$. $O$ va donc devoir choisir une valeur qui va influencer $psi_2, psi_3$. Son intérêt est d'invalider tous les $psi_i$. Il est obligé d'agir en priorité sur les variables pour lesquelles $y$ est la seule variable dans son camps à avoir un rôle sur l'invalidité, c'est-à-dire $psi_1$ et $psi_2$. Il peut éventuellement choisir des valeurs qui servent à invalider $psi_3$, mais ce n'est pas la priorité. 
+- Sur $psi_1$, tout ne sera que sous une forme équivalente à une égalité/inégalité linéaire sur $y$. Notons $E_1$ l'ensemble des valeurs ne vérifiant pas une de ces égalités/inégalités.
+- De même pour $psi_2(x, y, z)$, qui dépend encore de $z$ (choisi par $J$ au prochain tour). Pour bloquer le joueur, $O$ doit choisir $y$ tel qu'il devienne impossible pour $J$ de trouver un $z$ satisfaisant $psi_2$ plus tard. Notons $E_2$ l'ensemble des valeurs de $y$ telles que $forall z, not psi_2(x, y, z)$.
+Ainsi, si $E_1 inter E_2 != emptyset$, alors on peut prendre $y in E_1 inter E_2$ (si possible en restreignant le plus possible les choix de $z$ dans $psi_2$), sinon $J$ a gagné. On peut facilement vérifier si $E_1 inter E_2 = emptyset$ en éliminant les quantificateurs de la formule. Si $E_1 inter E_2 != emptyset$, on peut donc trouver des solutions. Cela ressemble à de l'algèbre linéaire : en supposant qu'il n'y a que des égalités, on tombe sur un sous-espace affine (ici, de dimension 1), alors rajouter des inégalités va créer une forme géométrique. On peut parler de #link("https://lalgebrisant.fr/images/pdfArticles/LePolyedreVide.pdf")["polyèdre convexe"]. Il est facile de trouver intuitivement les points qui n'y sont pas, puisqu'il est convexe et fini donc naturellement borné.
 #pagebreak()
 
 = Manuel
@@ -88,11 +132,17 @@ Nous avons créé des fonctions macro permettant une construction assez simple d
   [$exists x. P$],[`exists "x" P`],
   [$forall x. P$], [`forall "x" P`],
   [$x$ (variable)], [`var x`],
-  [$n$ (nombre)], [`val_ n`],
+  [$n in ZZ$], [`val_ n`],
+  [$p/q$ avec $(p,q) in ZZ^2$], [`frac p q`],
   [$x + y$], [`add x y`],
   [$x - y$], [`sub x y`],
-  [$x times y$], [`mul x y`]
+  [$a cdot x$ avec $a in ZZ$], [`mul a x`],
+  [$p/q cdot x$], [`mul_frac p q x`]
 )
+
+L'exécution de la procédure se fera via la fonction `final_test` avec le nom de la formule (voir exemples). 
+
+#pagebreak()
 
 == Exemples
 
@@ -126,9 +176,7 @@ Nous avons créé des fonctions macro permettant une construction assez simple d
   ```
 ]
 
-#pagebreak()
-
-L'exécution de la procédure se fera via la fonction `final_test` avec le nom de la formule. Exemple :
+Exemples d'exécution de la procédure :
 
 #sourcecode[
   ```ml

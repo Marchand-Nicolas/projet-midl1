@@ -122,18 +122,15 @@ module SyntaxTree = struct
   let disj f g = BoolF(f,Disj,g);;
   let implies f g = BoolF(notf f,Disj, g);;
   let var x = Var x;;
-  let val_ k = Val (Rational.of_int k);; 
-  let n_ x = Rational.of_int x;;
-  let frac n d = Val (Rational.make n d);;
+  let val_ k = Val (Rational.of_int k);;
+  let frac p q = Val (Rational.make p q);;
   let add t1 t2 = Add(t1, t2);;
   let sub t1 t2 = Sub(t1, t2);;
   let mul k t = Mult(Rational.of_int k, t);;
-  let mul_frac n d t = Mult(Rational.make n d, t);;
+  let mul_frac p q t = Mult(Rational.make p q, t);;
 
 let add t1 t2 = Add(t1, t2);;
-let sub t1 t2 = Sub(t1, t2);;
-let int_mul k t = Mult({num = k ; denom = 1}, t);;
-let mul k t = Mult(k, t);
+let sub t1 t2 = Sub(t1, t2);
 
 end;;
 
@@ -1013,7 +1010,7 @@ print_string "\n=== LOT 2 ===\n";;
 let test_arith_1 = (*∃x ∈ ℤ, 2x < 10 ∧ 3 < x*)
   exists "x" (
     conj 
-      (lt (mul (n_ 2) (var "x")) (val_ 10))
+      (lt (mul 2 (var "x")) (val_ 10))
       (lt (val_ 3) (var "x"))           
   );;
 
@@ -1022,7 +1019,7 @@ final_test test_arith_1 "TEST Arithmétique 1";;
 let test_arith_2 = (* ∃ x ∈ ℤ, -2x < -10 ∧ x < 8 *)
   exists "x" (
     conj 
-      (lt (mul (n_ (-2)) (var "x")) (val_ (-10)))
+      (lt (mul (-2) (var "x")) (val_ (-10)))
       (lt (var "x") (val_ 8))
   );;
 
@@ -1038,8 +1035,8 @@ final_test test_arith_3 "TEST Arithmétique 3";;
 let test_arith_4 = (* ∃ x ∈ ℤ, 2x + y < 10 ∧ z < 3x *)
   exists "x" (
     conj
-      (lt (add (mul (n_ 2) (var "x")) (var "y")) (val_ 10))
-      (lt (var "z") (mul (n_ 3) (var "x")))
+      (lt (add (mul 2 (var "x")) (var "y")) (val_ 10))
+      (lt (var "z") (mul 3 (var "x")))
   );;
 
 final_test test_arith_4 "TEST Arithmétique 4";;
@@ -1047,3 +1044,12 @@ final_test test_arith_4 "TEST Arithmétique 4";;
 let test_5 = NotF (NotF (Const Bottom));;
 
 final_test test_5 "TEST négation de constante";;
+
+let test_precision = 
+  exists "x" (
+    lt 
+      (add (var "x") (frac 3 10))            (* x + 0.3 *)
+      (add (var "x") (add (frac 1 10) (frac 2 10))) (* x + 0.1 + 0.2 *)
+  );;
+
+final_test test_precision "TEST Précision (0.3 < 0.1 + 0.2)";;

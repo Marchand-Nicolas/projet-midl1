@@ -2,14 +2,14 @@
 #import "@preview/ctheorems:1.1.3": *
 #import "@preview/zebraw:0.5.5" : *
 #import "@preview/codelst:2.0.2": sourcecode
-
+#import "@preview/plotsy-3d:0.2.1" : *
 #import "@preview/diagraph:0.3.6" : *
 
 #import "lib.typ": *
 
 #show: university-assignment.with(
   title: "Projet MIDL 1",
-  subtitle: "Implémentation de la procédure de décision dans la théorie des Ordres Denses",
+  subtitle: "Implémentation de la procédure de décision dans la théorie des Ordres Denses sans Bornes",
   authors: ("DAVID--MULLER Robin", "MARCHAND Nicolas", "VASSEUR-LAURENS Odin"),
   details: (
     course: "Projet MIDL 1",
@@ -47,7 +47,7 @@ Nous avons donc commencé par traduire le script python fourni par nos professeu
 
 Ensuite, nous avons assez facilement implémenté le prétraitement. Notre choix a été de séparer chaque clause de notre forme normale disjonctive dans une liste après avoir poussé les quantificateurs existentiels dans celle-ci. 
 
-Nous voilà donc en train de traiter un ensemble de disjonctions.
+Nous nous retrouvons finalement en train de traiter un ensemble de disjonctions.
 Nous avons donc choisi de classifier dans un dictionnaire toutes les contraintes sur chaque variable quantifiée : égalités, majorantions, minorations, formules indépendantes ($chi$). Maintenant que cela est fait, nous avons appliqué toutes les règles de suppression de quantification universelle, à l'exception de la seconde ("si $psi$ contient $x < x : (exists x.psi)<-> bot$") que nous avons supprimé lors de notre implémentation du Lot 2 ; cela sera donc détaillé plus tard.
 
 #pagebreak()
@@ -110,12 +110,12 @@ Soit la formule $exists x. forall y. exists z. forall t.$$P(x,y,z,t)$ avec le pr
   ```
 )
 Au premier tour, $J$ choisit une valeur valide pour tous les $psi$. $O$ va donc devoir choisir une valeur qui va influencer $psi_2, psi_3$. Son intérêt est d'invalider tous les $psi_i$. Il est obligé d'agir en priorité sur les variables pour lesquelles $y$ est la seule variable dans son camps à avoir un rôle sur l'invalidité, c'est-à-dire $psi_1$ et $psi_2$. Il peut éventuellement choisir des valeurs qui servent à invalider $psi_3$, mais ce n'est pas la priorité. 
-- Sur $psi_1$, tout ne sera que sous une forme équivalente à une égalité/inégalité linéaire sur $y$. Notons $E_1$ l'ensemble des valeurs ne vérifiant pas une de ces égalités/inégalités.
-- De même pour $psi_2(x, y, z)$, qui dépend encore de $z$ (choisi par $J$ au prochain tour). Pour bloquer le joueur, $O$ doit choisir $y$ tel qu'il devienne impossible pour $J$ de trouver un $z$ satisfaisant $psi_2$ plus tard. Notons $E_2$ l'ensemble des valeurs de $y$ telles que $forall z, not psi_2(x, y, z)$.
-Ainsi, si $E_1 inter E_2 != emptyset$, alors on peut prendre $y in E_1 inter E_2$ (si possible en restreignant le plus possible les choix de $z$ dans $psi_2$), sinon $J$ a gagné. On peut facilement vérifier si $E_1 inter E_2 = emptyset$ en éliminant les quantificateurs de la formule. Si $E_1 inter E_2 != emptyset$, on peut donc trouver des solutions. Cela ressemble à de l'algèbre linéaire : en supposant qu'il n'y a que des égalités, on tombe sur un sous-espace affine (ici, de dimension 1), alors rajouter des inégalités va créer une forme géométrique. On peut parler de #link("https://lalgebrisant.fr/images/pdfArticles/LePolyedreVide.pdf")["polyèdre convexe"]. Il est facile de trouver intuitivement les points qui n'y sont pas, puisqu'il est convexe et fini donc naturellement borné. Trouver un point extérieur est intuitif : le polyèdre étant défini par des "facettes", il suffit de choisir une valeur qui franchit l'une de ces bornes (par exemple, une valeur strictement plus grande que la borne supérieure identifiée par l'élimination des variables). Pour choisir la valeur la plus restrictive possible, on peut prendre une borne de $y$ la plus proche possible du bord du bord du polyèdre, c'est-à-dire de sa borne. L'ordinateur peut en réalité prendre directement l'union des polyèdres $psi_2$ et $psi_3$ pour avoir une valeur qui invalide $psi_2$, $psi_3$ et $psi_4$. Ainsi, $O$ gagne forcément. Il peut jouer une valeur quelconque jusqu'à la fin. Cette approche géométrique (intersections de polyèdres, projections) correspond exactement à ce que calcule l'algorithme d'élimination des quantificateurs (Fourier-Motzkin) implémenté dans le Lot 2.
-L'ensemble $I$ que nous récupérons en sortie de l'élimination est la représentation algébrique du complémentaire de cette intersection $(E_1 union E_2)^C$ projetée sur la variable courante.
+- Sur $psi_1$, tout ne sera que sous une forme équivalente à une égalité/inégalité linéaire sur $y$. Notons $E_1 = { y in QQ | psi_1(x,y) }$ l'ensemble des valeurs vérifiant.
+- De même pour $psi_2(x, y, z)$, qui dépend encore de $z$ (choisi par $J$ au prochain tour). Pour bloquer le joueur, $O$ doit choisir $y$ tel qu'il devienne impossible pour $J$ de trouver un $z$ satisfaisant $psi_2$ plus tard. Notons $E_2= { y in QQ | exists z in QQ : psi_2(x,y,z) }$ l'ensemble des valeurs.
+Ainsi, si $E_1 union E_2 != QQ$, alors on peut prendre $y in QQ without (E_1 union E_2)$, sinon $J$ a gagné. On peut facilement vérifier si $E_1 union E_2 = emptyset$ en éliminant les quantificateurs de la formule. Si $E_1 union E_2 != QQ$, on peut donc trouver des valeurs qui vont falsifier $psi_1$ et $psi_2$. Cela ressemble à de l'algèbre linéaire : en supposant qu'il n'y a que des égalités, on tombe sur un sous-espace affine (ici, de dimension 1), alors rajouter des inégalités va créer une forme géométrique. On peut parler de #link("https://lalgebrisant.fr/images/pdfArticles/LePolyedreVide.pdf")["polyèdre convexe"]. Trouver un point extérieur est intuitif : le polyèdre étant défini par des "facettes", il suffirait de choisir une valeur de $y$ qui permet d franchir l'une de ces bornes. L'ordinateur peut en réalité prendre directement l'union des polyèdres/sous-espaces affines générés par $psi_1, psi_2, psi_3$ afin de les invalider par la théorie des ordres denses sans bornes; l'élimination des quantificateurs va projeter l'union de formes géométriques et la projeter sur l'axe de $y$. Ainsi, $O$ gagne forcément, car la subsitution d'une variable quantifiée par une constante n'est qu'une projection de cet ensemble de formes sur une dimension plus faible. Il peut ainsi jouer une valeur quelconque jusqu'à la fin. Cette approche géométrique (intersections de polyèdres/sous-espaces affines et projections) correspond exactement à ce que calcule l'algorithme d'élimination des quantificateurs avec Fourier-Motzkin et Gauss-Jordan implémentés dans le Lot 2.
+L'ensemble $I$ récupéré en sortie de l'élimination de $exists z. forall t. psi_1(x,y) or psi_2(x,y,z) or psi_3(x,y,z,t)$ est la représentation de l'union des polyèdres et/ou espaces affines représentés par les clauses ($E_1 union E_2 union E_3$) projetée sur l'axe $(O y)$. Il suffit de prendre $y in QQ without I$ pour gagner.
 
-Pour terminer, supposons que $O$ soit dans le rôle inverse (il doit prouver une existence). Alors il suffit de prendre une valeur entre les bornes. Cependant, il pourrait être mené à choisir une valeur d'existence lors du choix de la valeur de $t$.
+Pour terminer, supposons que $O$ soit dans le rôle inverse (il doit prouver une existence). Alors il suffit de faire la même chose, mais en prenant une valeur dans $I$, et perdra si la projection sur l'axe $(O y)$ est l'ensemble vide. Cependant, dans ce cas, il pourrait être mené à choisir une valeur d'existence lors du choix de la valeur de $t$.
 
 #set enum(numbering: "1) a)")
 == Méthode

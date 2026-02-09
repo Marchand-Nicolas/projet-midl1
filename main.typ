@@ -88,6 +88,9 @@ utop # 0.1 +. 0.2;;
 #pagebreak()
 
 = Lot 3
+
+== Élaboration de la méthode
+
 Il nous est demandé de faire un jeu consistant pour le joueur $J$ de trouver un exemple validant une formule satisfiable ou invalidant un résultat non satisfiable. L'ordinateur $O$ doit alors trouver une stratégie pour bloquer les choix du joueur. Dans un premier temps, l'ordinateur doit vérifier la véracité de la formule en appliquant totalement la suppression des quantificateurs. Après avoir enregistré l'ordre des quantificateurs dans la formule de base (sous forme prénexe), il faut que $O$ ait une bonne vue d'ensemble des contraintes imposées à chaque variable. Notre implémentation des clauses après le prétraitement est déjà parfaite, elle représente tout ce dont on a besoin. Raisonnons par l'exemple :
 
 Soit la formule $exists x. forall y. exists z. forall t.$$P(x,y,z,t)$ avec le prédicat $P(x,y,z,t) equiv psi_1(x,y) or psi_2(x,y,z) or psi_3(x,y,z,t)$ où les $psi_i$ sont des prédicats représentants un ensemble de disjonction. Représentons l'arbre $({x, y, z, t} union {(psi_i)}, {(a,psi) | psi "dépend de "a})$ :
@@ -109,7 +112,22 @@ Soit la formule $exists x. forall y. exists z. forall t.$$P(x,y,z,t)$ avec le pr
 Au premier tour, $J$ choisit une valeur valide pour tous les $psi$. $O$ va donc devoir choisir une valeur qui va influencer $psi_2, psi_3$. Son intérêt est d'invalider tous les $psi_i$. Il est obligé d'agir en priorité sur les variables pour lesquelles $y$ est la seule variable dans son camps à avoir un rôle sur l'invalidité, c'est-à-dire $psi_1$ et $psi_2$. Il peut éventuellement choisir des valeurs qui servent à invalider $psi_3$, mais ce n'est pas la priorité. 
 - Sur $psi_1$, tout ne sera que sous une forme équivalente à une égalité/inégalité linéaire sur $y$. Notons $E_1$ l'ensemble des valeurs ne vérifiant pas une de ces égalités/inégalités.
 - De même pour $psi_2(x, y, z)$, qui dépend encore de $z$ (choisi par $J$ au prochain tour). Pour bloquer le joueur, $O$ doit choisir $y$ tel qu'il devienne impossible pour $J$ de trouver un $z$ satisfaisant $psi_2$ plus tard. Notons $E_2$ l'ensemble des valeurs de $y$ telles que $forall z, not psi_2(x, y, z)$.
-Ainsi, si $E_1 inter E_2 != emptyset$, alors on peut prendre $y in E_1 inter E_2$ (si possible en restreignant le plus possible les choix de $z$ dans $psi_2$), sinon $J$ a gagné. On peut facilement vérifier si $E_1 inter E_2 = emptyset$ en éliminant les quantificateurs de la formule. Si $E_1 inter E_2 != emptyset$, on peut donc trouver des solutions. Cela ressemble à de l'algèbre linéaire : en supposant qu'il n'y a que des égalités, on tombe sur un sous-espace affine (ici, de dimension 1), alors rajouter des inégalités va créer une forme géométrique. On peut parler de #link("https://lalgebrisant.fr/images/pdfArticles/LePolyedreVide.pdf")["polyèdre convexe"]. Il est facile de trouver intuitivement les points qui n'y sont pas, puisqu'il est convexe et fini donc naturellement borné.
+Ainsi, si $E_1 inter E_2 != emptyset$, alors on peut prendre $y in E_1 inter E_2$ (si possible en restreignant le plus possible les choix de $z$ dans $psi_2$), sinon $J$ a gagné. On peut facilement vérifier si $E_1 inter E_2 = emptyset$ en éliminant les quantificateurs de la formule. Si $E_1 inter E_2 != emptyset$, on peut donc trouver des solutions. Cela ressemble à de l'algèbre linéaire : en supposant qu'il n'y a que des égalités, on tombe sur un sous-espace affine (ici, de dimension 1), alors rajouter des inégalités va créer une forme géométrique. On peut parler de #link("https://lalgebrisant.fr/images/pdfArticles/LePolyedreVide.pdf")["polyèdre convexe"]. Il est facile de trouver intuitivement les points qui n'y sont pas, puisqu'il est convexe et fini donc naturellement borné. Trouver un point extérieur est intuitif : le polyèdre étant défini par des "facettes", il suffit de choisir une valeur qui franchit l'une de ces bornes (par exemple, une valeur strictement plus grande que la borne supérieure identifiée par l'élimination des variables). Pour choisir la valeur la plus restrictive possible, on peut prendre une borne de $y$ la plus proche possible du bord du bord du polyèdre, c'est-à-dire de sa borne. L'ordinateur peut en réalité prendre directement l'union des polyèdres $psi_2$ et $psi_3$ pour avoir une valeur qui invalide $psi_2$, $psi_3$ et $psi_4$. Ainsi, $O$ gagne forcément. Il peut jouer une valeur quelconque jusqu'à la fin. Cette approche géométrique (intersections de polyèdres, projections) correspond exactement à ce que calcule l'algorithme d'élimination des quantificateurs (Fourier-Motzkin) implémenté dans le Lot 2.
+L'ensemble $I$ que nous récupérons en sortie de l'élimination est la représentation algébrique du complémentaire de cette intersection $(E_1 union E_2)^C$ projetée sur la variable courante.
+
+Pour terminer, supposons que $O$ soit dans le rôle inverse (il doit prouver une existence). Alors il suffit de prendre une valeur entre les bornes. Cependant, il pourrait être mené à choisir une valeur d'existence lors du choix de la valeur de $t$.
+
+#set enum(numbering: "1) a)")
+== Méthode
+Ainsi, la méthode est finalement assez simple :
+
+Si l'on note l'ensemble des variables $(x_i)_(1 <= i <= n)$ et $(psi_i)_(1 <= i <= m)$ l'ensemble des clauses de la DNF de $P$. Si l'ordinateur est au tour $k$, les variables $x_i$ sont fixées pour tout $i < k$. Ainsi, on élimine les quantificateurs des variables $x_(k+1), dots, x_n$ de la proposition de départ en  substituant les $k-1$ premières variables par les valeurs choisies. Supposons que nous sommes au tour de $O$. 
++ Si $O$ doit réfuter la formule :
+  + Si le résultat de l'élimination donne $top$, $O$ a perdu, il joue une valeur par défaut. Si le résultat donne $bot$, il a gagné, il joue aussi une valeur par défaut. Sinon, Notons $I$ l'intervalle représentée par le résultat ; qui est soit une union d'intervalles, soit un singleton.
+  + $O$ choisit $x in QQ without I$, $J$ n'a plus la possibilité de gagner ($O$ a "neutralisé" $J$ en falsifiant chaque clause, comme dans l'exemple).
++ Si $O$ doit valider la formule :
+  + Si le résultat de l'élimination donne $bot$, $O$ a perdu, il joue une valeur par défaut et le fera jusqu'à la fin de la partie. S'il donne $top$, il joue aussi une valeur par défaut. Sinon $O$ choisit $x in I$.
+
 #pagebreak()
 
 = Manuel
